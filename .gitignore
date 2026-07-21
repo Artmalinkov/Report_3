@@ -170,5 +170,5 @@ config.yaml
 .env
 
 # My develop files
-ROADMAP.md
-MAIN_PROMT.md
+for_dev/ROADMAP.md
+for_dev/MAIN_PROMT.md
