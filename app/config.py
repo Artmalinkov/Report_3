@@ -2,6 +2,7 @@
 '''
 Файл основных конфигураций
 '''
+from pathlib import Path
 from pydantic_settings import BaseSettings
 
 
@@ -30,7 +31,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     class Config:
-        env_file = ".env"
+        env_file = Path(__file__).parent.parent / ".env"
         case_sensitive = True
 
 

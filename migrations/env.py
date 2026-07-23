@@ -14,6 +14,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.database.base import Base
 from app.config import settings
 
+from app.database.models import User, Report, Cache
+
 # this is the Alembic Config object
 config = context.config
 
