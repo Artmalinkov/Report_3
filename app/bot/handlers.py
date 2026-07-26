@@ -71,8 +71,11 @@ async def cmd_start(message: Message, state: FSMContext):
 
     logger.info(f"Пользователь {user.telegram_id} запустил бота")
 
+    mode_text = "🔧 <b>Режим:</b> РАЗРАБОТКА (мок-данные)\n" if settings.DEBUG else ""
+
     await message.answer(
-        "🏢 <b>Добро пожаловать в Report_3!</b>\n\n"
+        f"🏢 <b>Добро пожаловать в Report_3!</b>\n\n"
+        f"{mode_text}"
         "Я помогу вам проанализировать финансовую отчетность компании по ИНН.\n\n"
         "📌 <b>Как использовать:</b>\n"
         "Просто отправьте мне ИНН (10 или 12 цифр)\n\n"

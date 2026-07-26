@@ -11,22 +11,22 @@ MOCK_COMPANIES = {
         "address": "г. Москва, ул. Вавилова, д. 19",
         "period": "2024",
         "balance": {
-            "assets": "45_000_000_000",
-            "liabilities": "30_000_000_000",
-            "capital": "15_000_000_000",
-            "non_current_assets": "25_000_000_000",
-            "current_assets": "20_000_000_000",
-            "long_term_liabilities": "18_000_000_000",
-            "short_term_liabilities": "12_000_000_000",
+            "assets": "45000000000",
+            "liabilities": "30000000000",
+            "capital": "15000000000",
+            "non_current_assets": "25000000000",
+            "current_assets": "20000000000",
+            "long_term_liabilities": "18000000000",
+            "short_term_liabilities": "12000000000",
         },
         "profit_loss": {
-            "revenue": "12_000_000_000",
-            "profit": "3_500_000_000",
+            "revenue": "12000000000",
+            "profit": "3500000000",
             "loss": "0",
-            "gross_profit": "5_000_000_000",
-            "operating_expenses": "1_500_000_000",
-            "net_profit": "2_800_000_000",
-            "ebitda": "4_200_000_000",
+            "gross_profit": "5000000000",
+            "operating_expenses": "1500000000",
+            "net_profit": "2800000000",
+            "ebitda": "4200000000",
         }
     },
     "7702070139": {
@@ -36,22 +36,22 @@ MOCK_COMPANIES = {
         "address": "г. Москва, ул. Наметкина, д. 16",
         "period": "2024",
         "balance": {
-            "assets": "28_000_000_000",
-            "liabilities": "18_000_000_000",
-            "capital": "10_000_000_000",
-            "non_current_assets": "18_000_000_000",
-            "current_assets": "10_000_000_000",
-            "long_term_liabilities": "12_000_000_000",
-            "short_term_liabilities": "6_000_000_000",
+            "assets": "28000000000",
+            "liabilities": "18000000000",
+            "capital": "10000000000",
+            "non_current_assets": "18000000000",
+            "current_assets": "10000000000",
+            "long_term_liabilities": "12000000000",
+            "short_term_liabilities": "6000000000",
         },
         "profit_loss": {
-            "revenue": "8_500_000_000",
-            "profit": "2_100_000_000",
+            "revenue": "8500000000",
+            "profit": "2100000000",
             "loss": "0",
-            "gross_profit": "3_800_000_000",
-            "operating_expenses": "1_700_000_000",
-            "net_profit": "1_800_000_000",
-            "ebitda": "3_000_000_000",
+            "gross_profit": "3800000000",
+            "operating_expenses": "1700000000",
+            "net_profit": "1800000000",
+            "ebitda": "3000000000",
         }
     },
     "7736207543": {
@@ -61,35 +61,29 @@ MOCK_COMPANIES = {
         "address": "г. Москва, ул. Тестовая, д. 1",
         "period": "2024",
         "balance": {
-            "assets": "5_000_000_000",
-            "liabilities": "3_000_000_000",
-            "capital": "2_000_000_000",
-            "non_current_assets": "3_000_000_000",
-            "current_assets": "2_000_000_000",
-            "long_term_liabilities": "1_500_000_000",
-            "short_term_liabilities": "1_500_000_000",
+            "assets": "5000000000",
+            "liabilities": "3000000000",
+            "capital": "2000000000",
+            "non_current_assets": "3000000000",
+            "current_assets": "2000000000",
+            "long_term_liabilities": "1500000000",
+            "short_term_liabilities": "1500000000",
         },
         "profit_loss": {
-            "revenue": "2_500_000_000",
-            "profit": "500_000_000",
+            "revenue": "2500000000",
+            "profit": "500000000",
             "loss": "0",
-            "gross_profit": "1_200_000_000",
-            "operating_expenses": "700_000_000",
-            "net_profit": "400_000_000",
-            "ebitda": "800_000_000",
+            "gross_profit": "1200000000",
+            "operating_expenses": "700000000",
+            "net_profit": "400000000",
+            "ebitda": "800000000",
         }
     }
 }
 
-
-def get_mock_company(inn: str):
-    """Получение мок-данных компании"""
-    return MOCK_COMPANIES.get(inn)
-
-
 def get_mock_financial_data(inn: str):
     """Получение мок-финансовых данных"""
-    company = get_mock_company(inn)
+    company = MOCK_COMPANIES.get(inn)
     if company:
         return {
             "inn": inn,
