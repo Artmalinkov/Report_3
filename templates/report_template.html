@@ -1,1 +1,226 @@
-<!-- templates/report_template.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Финансовый отчет {{ company_name }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #2c3e50;
+            font-size: 28px;
+        }
+        .header .meta {
+            color: #7f8c8d;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+        .risk-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            color: white;
+            background-color: {{ risk_color }};
+            margin: 5px 0;
+        }
+        .section {
+            margin: 30px 0;
+        }
+        .section h2 {
+            color: #2c3e50;
+            border-left: 4px solid #4CAF50;
+            padding-left: 12px;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .stat {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat .label {
+            font-size: 12px;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stat .value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-top: 4px;
+        }
+        .analysis-text {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            line-height: 1.8;
+            margin: 10px 0;
+        }
+        .analysis-text h3 {
+            color: #2c3e50;
+            margin-top: 15px;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        .analysis-text h3:first-child {
+            margin-top: 0;
+        }
+        .analysis-text p {
+            margin: 8px 0;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ecf0f1;
+            text-align: center;
+            font-size: 12px;
+            color: #95a5a6;
+        }
+        @media (max-width: 600px) {
+            .container { padding: 20px; }
+            .grid { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Финансовый отчет</h1>
+            <div class="meta">
+                <strong>{{ company_name }}</strong> | ИНН: {{ inn }} | ОГРН: {{ ogrn }}<br>
+                Отчетный период: {{ period }} | Дата: {{ report_date }}
+            </div>
+            <div class="risk-badge">{{ risk_emoji }} {{ risk_level }} риск</div>
+        </div>
+
+        <div class="section">
+            <h2>📈 Ключевые показатели</h2>
+            <div class="grid">
+                <div class="stat">
+                    <div class="label">Выручка</div>
+                    <div class="value">{{ revenue }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Прибыль</div>
+                    <div class="value">{{ profit }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Активы</div>
+                    <div class="value">{{ assets }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Рентабельность</div>
+                    <div class="value">{{ profitability }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Собственный капитал</div>
+                    <div class="value">{{ capital }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Автономия</div>
+                    <div class="value">{{ autonomy_ratio }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🏦 Баланс</h2>
+            <div class="grid">
+                <div class="stat">
+                    <div class="label">Внеоборотные активы</div>
+                    <div class="value">{{ non_current_assets }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Оборотные активы</div>
+                    <div class="value">{{ current_assets }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Долгосрочные обязательства</div>
+                    <div class="value">{{ long_term_liabilities }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Краткосрочные обязательства</div>
+                    <div class="value">{{ short_term_liabilities }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📊 Прибыли и убытки</h2>
+            <div class="grid">
+                <div class="stat">
+                    <div class="label">Валовая прибыль</div>
+                    <div class="value">{{ gross_profit }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Операционные расходы</div>
+                    <div class="value">{{ operating_expenses }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Чистая прибыль</div>
+                    <div class="value">{{ net_profit }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">EBITDA</div>
+                    <div class="value">{{ ebitda }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🧠 Анализ ИИ</h2>
+            <div class="analysis-text">
+                <h3>Финансовое состояние</h3>
+                <p>{{ analysis_summary }}</p>
+
+                <h3>Ключевые показатели</h3>
+                <p>{{ key_metrics or 'Нет данных' }}</p>
+
+                <h3>Выявленные риски</h3>
+                <p>{{ risks or 'Не выявлены' }}</p>
+
+                <h3>Рекомендации</h3>
+                <p>{{ recommendations or 'Провести дополнительный анализ' }}</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            Отчет создан автоматически с использованием ИИ Report_3<br>
+            {{ report_date }}
+        </div>
+    </div>
+</body>
+</html>

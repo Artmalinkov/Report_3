@@ -194,18 +194,6 @@ class ReportGenerator:
         except Exception:
             return str(value) if value else "0"
 
-    @staticmethod
-    def _format_number(value: float) -> str:
-        """Форматирование числа для отображения"""
-        if value >= 1_000_000_000:
-            return f"{value / 1_000_000_000:.2f} млрд"
-        elif value >= 1_000_000:
-            return f"{value / 1_000_000:.2f} млн"
-        elif value >= 1_000:
-            return f"{value / 1_000:.2f} тыс"
-        else:
-            return f"{value:.0f}"
-
     def _create_default_template(self) -> str:
         """
         Создание базового шаблона, если файл не найден
