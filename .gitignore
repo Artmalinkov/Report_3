@@ -167,7 +167,14 @@ config.yaml
 *.pem
 *.key
 *.crt
-.env
 
 # My develop files
 for_dev/
+reports/
+
+# Test results
+*_test_result.json
+*.test.log
+coverage/
+htmlcov/
+.pytest_cache/
