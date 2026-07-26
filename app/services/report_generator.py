@@ -76,17 +76,21 @@ class ReportGenerator:
             financial_data: Dict[str, Any],
             analysis: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """
-        Подготовка данных для шаблона
-        """
+        """Подготовка данных для шаблона"""
         balance = financial_data.get("balance", {})
         profit_loss = financial_data.get("profit_loss", {})
 
-        # Расчет дополнительных показателей
-        revenue = self._safe_float(profit_loss.get("revenue", "0"))
-        profit = self._safe_float(profit_loss.get("profit", "0"))
-        assets = self._safe_float(balance.get("assets", "0"))
-        capital = self._safe_float(balance.get("capital", "0"))
+        # Безопасное получение значений
+        def get_safe_value(dict_obj, key, default="0"):
+            value = dict_obj.get(key, default)
+            if value is None:
+                return default
+            return value
+
+        revenue = self._safe_float(get_safe_value(profit_loss, "revenue", "0"))
+        profit = self._safe_float(get_safe_value(profit_loss, "profit", "0"))
+        assets = self._safe_float(get_safe_value(balance, "assets", "0"))
+        capital = self._safe_float(get_safe_value(balance, "capital", "0"))
 
         # Рентабельность
         profitability = (profit / revenue * 100) if revenue > 0 else 0
@@ -116,7 +120,7 @@ class ReportGenerator:
             "status": financial_data.get("status", "Активна"),
             "legal_address": financial_data.get("legal_address", ""),
 
-            # Финансовые показатели
+            # Финансовые показатели (форматированные)
             "revenue": self._format_number(revenue),
             "profit": self._format_number(profit),
             "assets": self._format_number(assets),
@@ -124,15 +128,15 @@ class ReportGenerator:
             "profitability": f"{profitability:.1f}%",
             "autonomy_ratio": f"{autonomy_ratio:.1f}%",
 
-            # Детальные данные баланса
-            "non_current_assets": self._format_number(balance.get("non_current_assets", "0")),
-            "current_assets": self._format_number(balance.get("current_assets", "0")),
-            "long_term_liabilities": self._format_number(balance.get("long_term_liabilities", "0")),
-            "short_term_liabilities": self._format_number(balance.get("short_term_liabilities", "0")),
-            "gross_profit": self._format_number(profit_loss.get("gross_profit", "0")),
-            "operating_expenses": self._format_number(profit_loss.get("operating_expenses", "0")),
-            "net_profit": self._format_number(profit_loss.get("net_profit", "0")),
-            "ebitda": self._format_number(profit_loss.get("ebitda", "0")),
+            # Детальные данные баланса (безопасное получение)
+            "non_current_assets": self._format_number(get_safe_value(balance, "non_current_assets", "0")),
+            "current_assets": self._format_number(get_safe_value(balance, "current_assets", "0")),
+            "long_term_liabilities": self._format_number(get_safe_value(balance, "long_term_liabilities", "0")),
+            "short_term_liabilities": self._format_number(get_safe_value(balance, "short_term_liabilities", "0")),
+            "gross_profit": self._format_number(get_safe_value(profit_loss, "gross_profit", "0")),
+            "operating_expenses": self._format_number(get_safe_value(profit_loss, "operating_expenses", "0")),
+            "net_profit": self._format_number(get_safe_value(profit_loss, "net_profit", "0")),
+            "ebitda": self._format_number(get_safe_value(profit_loss, "ebitda", "0")),
 
             # Анализ ИИ
             "analysis_summary": analysis.get("summary", "Анализ не выполнен"),
@@ -148,19 +152,47 @@ class ReportGenerator:
         }
 
     @staticmethod
-    def _safe_float(value: str) -> float:
-        """Безопасное преобразование строки в число"""
+    def _safe_float(value) -> float:
+        """Безопасное преобразование в число"""
         try:
             if isinstance(value, (int, float)):
                 return float(value)
             if isinstance(value, str):
+                # Убираем пробелы, заменяем запятые на точки
                 cleaned = value.replace(" ", "").replace(",", ".").strip()
-                if not cleaned:
+                # Убираем буквенные обозначения (тыс, млн, млрд)
+                cleaned = cleaned.replace("тыс", "").replace("млн", "").replace("млрд", "").strip()
+                if not cleaned or cleaned == "-":
                     return 0.0
+                # Обрабатываем случай с точками как разделителями тысяч
+                # Например: "1.000.000" -> "1000000"
+                if "." in cleaned and cleaned.count(".") > 1:
+                    cleaned = cleaned.replace(".", "")
                 return float(cleaned)
             return 0.0
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, AttributeError):
             return 0.0
+
+    @staticmethod
+    def _format_number(value) -> str:
+        """Форматирование числа для отображения"""
+        try:
+            # Если value уже строка с форматированием, возвращаем как есть
+            if isinstance(value, str) and not value.replace(" ", "").replace(",", ".").strip().isdigit():
+                return value
+
+            num = ReportGenerator._safe_float(value)
+
+            if num >= 1_000_000_000:
+                return f"{num / 1_000_000_000:.2f} млрд"
+            elif num >= 1_000_000:
+                return f"{num / 1_000_000:.2f} млн"
+            elif num >= 1_000:
+                return f"{num / 1_000:.2f} тыс"
+            else:
+                return f"{num:.0f}"
+        except Exception:
+            return str(value) if value else "0"
 
     @staticmethod
     def _format_number(value: float) -> str:

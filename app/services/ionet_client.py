@@ -22,6 +22,52 @@ class IONETClient:
         self.session: Optional[aiohttp.ClientSession] = None
         self.timeout = aiohttp.ClientTimeout(total=60)
 
+    def _get_mock_analysis(self, financial_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Возвращает мок-анализ при недоступности API"""
+        company_name = financial_data.get("company_name", "Компания")
+        profit = self._safe_float(financial_data.get("profit_loss", {}).get("profit", "0"))
+        revenue = self._safe_float(financial_data.get("profit_loss", {}).get("revenue", "0"))
+        assets = self._safe_float(financial_data.get("balance", {}).get("assets", "0"))
+        capital = self._safe_float(financial_data.get("balance", {}).get("capital", "0"))
+
+        profitability = (profit / revenue * 100) if revenue > 0 else 0
+        autonomy = (capital / assets * 100) if assets > 0 else 0
+
+        # Определяем уровень риска
+        if profitability > 10 and autonomy > 50:
+            risk_level = "Низкий"
+            summary = f"Компания {company_name} демонстрирует хорошие финансовые показатели. Высокая рентабельность ({profitability:.1f}%) и хорошая финансовая устойчивость (автономия {autonomy:.1f}%)."
+        elif profitability > 0 and autonomy > 30:
+            risk_level = "Средний"
+            summary = f"Компания {company_name} имеет средние финансовые показатели. Рентабельность {profitability:.1f}%, автономия {autonomy:.1f}%. Требуется дополнительный анализ."
+        else:
+            risk_level = "Высокий"
+            summary = f"Компания {company_name} показывает низкую рентабельность ({profitability:.1f}%) и недостаточную финансовую устойчивость (автономия {autonomy:.1f}%). Рекомендуется детальный анализ."
+
+        return {
+            "summary": summary,
+            "key_metrics": f"Рентабельность: {profitability:.1f}% | Автономия: {autonomy:.1f}% | Выручка: {revenue:,.0f} руб.",
+            "risks": "Низкая диверсификация источников дохода. Зависимость от экономической ситуации.",
+            "recommendations": "1. Увеличить долю собственного капитала\n2. Диверсифицировать источники дохода\n3. Повысить эффективность управления активами",
+            "risk_level": risk_level,
+            "full_response": f"Анализ выполнен на основе базовых метрик (режим оффлайн)"
+        }
+
+    @staticmethod
+    def _safe_float(value) -> float:
+        """Безопасное преобразование в число"""
+        try:
+            if isinstance(value, (int, float)):
+                return float(value)
+            if isinstance(value, str):
+                cleaned = value.replace(" ", "").replace(",", ".").strip()
+                if not cleaned:
+                    return 0.0
+                return float(cleaned)
+            return 0.0
+        except (ValueError, TypeError):
+            return 0.0
+
     async def _get_session(self) -> aiohttp.ClientSession:
         """Получение или создание сессии"""
         if self.session is None or self.session.closed:
@@ -43,12 +89,6 @@ class IONETClient:
     async def analyze_financial_data(self, financial_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Анализ финансовых данных с помощью ИИ
-
-        Args:
-            financial_data: Данные финансовой отчетности
-
-        Returns:
-            Dict с результатами анализа
         """
         logger.info("Начало анализа финансовых данных через IO_NET")
 
@@ -65,10 +105,11 @@ class IONETClient:
             logger.info("Анализ финансовых данных успешно завершен")
             return analysis
 
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError, Exception) as e:
             logger.error(f"Ошибка при анализе через IO_NET: {e}")
-            # Возвращаем базовый анализ в случае ошибки
-            return self._get_fallback_analysis(financial_data)
+            # Возвращаем мок-анализ при недоступности API
+            logger.info("Использован мок-анализ (режим оффлайн)")
+            return self._get_mock_analysis(financial_data)
 
     async def _send_request(self, prompt: str) -> Dict[str, Any]:
         """
