@@ -35,6 +35,13 @@ from app.services.report_generator import ReportGenerator
 from app.utils.validators import validate_inn
 from app.config import settings
 
+# Известные ИНН для тестирования
+TEST_INNS = {
+    "7707083893": "ПАО Сбербанк",
+    "7702070139": "ПАО Газпром",
+    "7736207543": "ООО Тестовая Компания",
+}
+
 # Создаем роутер
 router = Router()
 
@@ -230,7 +237,11 @@ async def handle_inn(message: Message, state: FSMContext):
         await message.answer(
             "❌ <b>Неверный ИНН</b>\n\n"
             "ИНН должен содержать 10 или 12 цифр.\n"
-            "Пример: 7707083893"
+            "Пример: 7707083893\n\n"
+            "📋 <b>Тестовые ИНН:</b>\n"
+            "• 7707083893 - Сбербанк\n"
+            "• 7702070139 - Газпром\n"
+            "• 7736207543 - Тестовая"
         )
         return
 
@@ -266,17 +277,30 @@ async def handle_inn(message: Message, state: FSMContext):
                 inn=inn
             )
 
-        await status_msg.edit_text(
-            "🧠 <i>Анализирую данные с помощью AI...</i>\n"
-            "⏳ Это может занять несколько секунд"
-        )
+        # Пытаемся обновить сообщение, если оно еще существует
+        try:
+            await status_msg.edit_text(
+                "🧠 <i>Анализирую данные с помощью AI...</i>\n"
+                "⏳ Это может занять несколько секунд"
+            )
+        except Exception:
+            # Если не удалось отредактировать, отправляем новое
+            status_msg = await message.answer(
+                "🧠 <i>Анализирую данные с помощью AI...</i>\n"
+                "⏳ Это может занять несколько секунд"
+            )
 
         # 3. Анализ через IO_NET
         analysis = await ionet_client.analyze_financial_data(financial_data)
 
-        await status_msg.edit_text(
-            "📄 <i>Генерирую HTML-отчет...</i>"
-        )
+        try:
+            await status_msg.edit_text(
+                "📄 <i>Генерирую HTML-отчет...</i>"
+            )
+        except Exception:
+            status_msg = await message.answer(
+                "📄 <i>Генерирую HTML-отчет...</i>"
+            )
 
         # 4. Генерация HTML
         html_path, html_content = await report_generator.generate_report(
@@ -301,7 +325,10 @@ async def handle_inn(message: Message, state: FSMContext):
         )
 
         # 6. Отправка отчета
-        await status_msg.delete()
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass  # Игнорируем ошибку удаления
 
         document = FSInputFile(
             path=html_path,
@@ -336,12 +363,33 @@ async def handle_inn(message: Message, state: FSMContext):
 
         logger.info(f"Отчет для ИНН {inn} успешно создан пользователем {user_id}")
 
+    except ValueError as e:
+        # Ошибка валидации (компания не найдена)
+        logger.error(f"Ошибка валидации для ИНН {inn}: {e}")
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+        await message.answer(
+            f"❌ <b>Компания не найдена</b>\n\n"
+            f"Проверьте правильность ИНН: <code>{inn}</code>\n"
+            f"Возможно, компания не существует или данные отсутствуют в ФНС.",
+            reply_markup=main_keyboard
+        )
+
     except Exception as e:
         logger.error(f"Ошибка при обработке ИНН {inn}: {e}")
-        await status_msg.edit_text(
-            f"❌ <b>Произошла ошибка:</b>\n\n{str(e)}\n\n"
-            "Попробуйте позже или обратитесь к администратору."
-        )
+        try:
+            await status_msg.edit_text(
+                f"❌ <b>Произошла ошибка:</b>\n\n{str(e)}\n\n"
+                "Попробуйте позже или обратитесь к администратору."
+            )
+        except Exception:
+            await message.answer(
+                f"❌ <b>Произошла ошибка:</b>\n\n{str(e)}\n\n"
+                "Попробуйте позже или обратитесь к администратору.",
+                reply_markup=main_keyboard
+            )
 
     await state.clear()
 
