@@ -32,8 +32,12 @@ def get_report_actions_keyboard(report_id: int) -> InlineKeyboardMarkup:
     """Инлайн-клавиатура для действий с отчетом"""
     builder = InlineKeyboardBuilder()
     builder.button(
-        text="📄 Скачать отчет",
+        text="📄 Скачать HTML",
         callback_data=f"download_report:{report_id}"
+    )
+    builder.button(
+        text="📑 Скачать PDF",
+        callback_data=f"download_pdf:{report_id}"
     )
     builder.button(
         text="🔄 Повторить анализ",
@@ -43,7 +47,7 @@ def get_report_actions_keyboard(report_id: int) -> InlineKeyboardMarkup:
         text="🗑 Удалить отчет",
         callback_data=f"delete_report:{report_id}"
     )
-    builder.adjust(2, 1)
+    builder.adjust(2, 2)
     return builder.as_markup()
 
 

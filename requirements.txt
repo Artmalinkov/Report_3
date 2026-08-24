@@ -35,6 +35,7 @@ MarkupSafe==3.0.3
 multidict==6.7.1
 openai==2.46.0
 packaging==26.2
+playwright==1.62.0
 pluggy==1.6.0
 prompt_toolkit==3.0.52
 propcache==0.5.2
@@ -48,6 +49,7 @@ pytest==9.1.1
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 python-magic==0.4.27
+pyee==13.0.1
 redis==8.0.1
 six==1.17.0
 sniffio==1.3.1

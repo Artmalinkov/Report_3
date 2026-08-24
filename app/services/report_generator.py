@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from loguru import logger
 from jinja2 import Template
+from playwright.async_api import async_playwright
 
 
 class ReportGenerator:
@@ -35,6 +36,28 @@ class ReportGenerator:
         except FileNotFoundError:
             logger.warning("templates/vendor/chart.umd.min.js не найден — графики в отчетах не будут работать")
             return ""
+
+    async def render_pdf(self, html_content: str) -> bytes:
+        """
+        Рендерит готовый HTML-отчет (с графиками Chart.js) в PDF через
+        headless Chromium — печатает страницу как настоящий браузер, а не
+        конвертирует HTML статически, поэтому графики попадают в PDF
+        такими же, как на экране. Анимация графиков отключена в шаблонах
+        (options.animation: false), чтобы снимок делался сразу после
+        отрисовки, без гадания с задержкой ожидания.
+        """
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            try:
+                page = await browser.new_page()
+                await page.set_content(html_content, wait_until="networkidle")
+                return await page.pdf(
+                    format="A4",
+                    print_background=True,
+                    margin={"top": "10mm", "bottom": "10mm", "left": "10mm", "right": "10mm"},
+                )
+            finally:
+                await browser.close()
 
     async def generate_report(
             self,

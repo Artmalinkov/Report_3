@@ -281,6 +281,7 @@
                     }]
                 },
                 options: {
+                    animation: false,
                     plugins: {
                         legend: { position: 'bottom' },
                         tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + ctx.parsed + ' ' + d.unit } }
@@ -299,6 +300,7 @@
                     datasets: [{ label: 'Сумма, ' + d.unit, data: d.values, backgroundColor: '#4CAF50' }]
                 },
                 options: {
+                    animation: false,
                     plugins: { legend: { display: false } },
                     scales: { y: { beginAtZero: true, title: { display: true, text: d.unit } } }
                 }

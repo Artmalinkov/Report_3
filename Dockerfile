@@ -4,6 +4,9 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+# Chromium для рендеринга PDF-версий отчетов (app/services/report_generator.py).
+# --with-deps ставит системные библиотеки, которых нет в minimal-образе
+RUN playwright install --with-deps chromium
 
 COPY app ./app
 COPY migrations ./migrations

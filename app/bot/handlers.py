@@ -3,7 +3,6 @@
 """
 Обработчики команд Telegram бота
 """
-import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -14,6 +13,7 @@ from aiogram.fsm.state import default_state
 from aiogram.types import (
     Message,
     CallbackQuery,
+    BufferedInputFile,
     FSInputFile,
     InlineKeyboardMarkup,
     ReplyKeyboardRemove
@@ -539,15 +539,25 @@ async def run_comparison(message: Message, state: FSMContext, user_id: int, inns
             comparison=comparison
         )
 
+        # Сравнительные отчеты не хранятся в БД (нет report_id для кнопки
+        # "Скачать PDF" позднее), поэтому PDF рендерится сразу и отправляется
+        # вторым файлом рядом с HTML
+        pdf_bytes = None
+        try:
+            pdf_bytes = await report_generator.render_pdf(html_content)
+        except Exception as e:
+            logger.warning(f"Не удалось сформировать PDF для сравнения: {e}")
+
         try:
             await status_msg.delete()
         except Exception:
             pass
 
         names = ", ".join(c.get("company_name", "?") for c in companies)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         document = FSInputFile(
             path=html_path,
-            filename=f"comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+            filename=f"comparison_{timestamp}.html"
         )
 
         caption = f"✅ <b>Сравнение готово!</b>\n\n🏢 {names}\n\n"
@@ -556,6 +566,13 @@ async def run_comparison(message: Message, state: FSMContext, user_id: int, inns
         caption += "💾 Полный текст сравнения — в отчете и следующем сообщении"
 
         await message.answer_document(document, caption=caption, reply_markup=main_keyboard)
+
+        if pdf_bytes:
+            await message.answer_document(
+                BufferedInputFile(pdf_bytes, filename=f"comparison_{timestamp}.pdf"),
+                caption="📑 Тот же отчет в PDF",
+                reply_markup=main_keyboard
+            )
 
         leader = comparison.get("leader", "")
         summary = comparison.get("summary", "")
@@ -589,7 +606,7 @@ async def run_comparison(message: Message, state: FSMContext, user_id: int, inns
 
 @router.callback_query(F.data.startswith("download_report:"))
 async def callback_download_report(callback: CallbackQuery):
-    """Скачивание отчета"""
+    """Скачивание отчета (HTML)"""
     report_id = int(callback.data.split(":")[1])
 
     report = await report_crud.get_by_id(report_id)
@@ -602,13 +619,8 @@ async def callback_download_report(callback: CallbackQuery):
         await callback.answer("❌ У вас нет доступа к этому отчету", show_alert=True)
         return
 
-    # Создаем временный файл
-    temp_path = f"/tmp/report_{report_id}.html"
-    with open(temp_path, 'w', encoding='utf-8') as f:
-        f.write(report.html_content)
-
-    document = FSInputFile(
-        path=temp_path,
+    document = BufferedInputFile(
+        report.html_content.encode('utf-8'),
         filename=f"report_{report.inn}_{report.created_at.strftime('%Y%m%d')}.html"
     )
 
@@ -617,13 +629,41 @@ async def callback_download_report(callback: CallbackQuery):
         caption=f"📄 Отчет для ИНН: <code>{report.inn}</code>"
     )
 
-    # Удаляем временный файл
-    try:
-        os.remove(temp_path)
-    except:
-        pass
-
     await callback.answer("✅ Отчет отправлен")
+
+
+@router.callback_query(F.data.startswith("download_pdf:"))
+async def callback_download_pdf(callback: CallbackQuery):
+    """Скачивание отчета в PDF (рендерится по запросу через headless Chromium)"""
+    report_id = int(callback.data.split(":")[1])
+
+    report = await report_crud.get_by_id(report_id)
+    if not report:
+        await callback.answer("❌ Отчет не найден", show_alert=True)
+        return
+
+    if report.user_id != callback.from_user.id:
+        await callback.answer("❌ У вас нет доступа к этому отчету", show_alert=True)
+        return
+
+    await callback.answer("⏳ Готовлю PDF...")
+
+    try:
+        pdf_bytes = await report_generator.render_pdf(report.html_content)
+    except Exception as e:
+        logger.error(f"Ошибка при рендеринге PDF для отчета {report_id}: {e}")
+        await callback.message.answer("❌ Не удалось сформировать PDF, попробуйте позже")
+        return
+
+    document = BufferedInputFile(
+        pdf_bytes,
+        filename=f"report_{report.inn}_{report.created_at.strftime('%Y%m%d')}.pdf"
+    )
+
+    await callback.message.answer_document(
+        document,
+        caption=f"📑 Отчет (PDF) для ИНН: <code>{report.inn}</code>"
+    )
 
 
 @router.callback_query(F.data.startswith("delete_report:"))
