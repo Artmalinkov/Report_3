@@ -37,6 +37,11 @@ class ReportGenerator:
             logger.warning("templates/vendor/chart.umd.min.js не найден — графики в отчетах не будут работать")
             return ""
 
+    # Ширина содержательной области A4 (210мм) за вычетом полей PDF (10мм
+    # слева и справа) в CSS-пикселях (96px/дюйм) — используется как ширина
+    # вьюпорта при рендере, см. render_pdf
+    PDF_CONTENT_WIDTH_PX = 720
+
     async def render_pdf(self, html_content: str) -> bytes:
         """
         Рендерит готовый HTML-отчет (с графиками Chart.js) в PDF через
@@ -45,11 +50,18 @@ class ReportGenerator:
         такими же, как на экране. Анимация графиков отключена в шаблонах
         (options.animation: false), чтобы снимок делался сразу после
         отрисовки, без гадания с задержкой ожидания.
+
+        Вьюпорт задается шириной печатной области заранее, до set_content:
+        Chart.js строит canvas под ширину контейнера в момент создания
+        графика, и без этого он рисуется под дефолтные 1280px экрана, а
+        затем обрезается по факту при печати в более узкий A4.
         """
         async with async_playwright() as p:
             browser = await p.chromium.launch()
             try:
-                page = await browser.new_page()
+                page = await browser.new_page(
+                    viewport={"width": self.PDF_CONTENT_WIDTH_PX, "height": 1000}
+                )
                 await page.set_content(html_content, wait_until="networkidle")
                 return await page.pdf(
                     format="A4",
