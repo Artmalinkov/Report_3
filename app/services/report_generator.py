@@ -177,20 +177,22 @@ class ReportGenerator:
     def _format_number(value) -> str:
         """Форматирование числа для отображения"""
         try:
-            # Если value уже строка с форматированием, возвращаем как есть
-            if isinstance(value, str) and not value.replace(" ", "").replace(",", ".").strip().isdigit():
+            # Нечисловые метки (например "Н/Д") возвращаем как есть
+            if isinstance(value, str) and value.strip().upper() in ("Н/Д", "НЕТ ДАННЫХ", ""):
                 return value
 
             num = ReportGenerator._safe_float(value)
+            sign = "-" if num < 0 else ""
+            num = abs(num)
 
             if num >= 1_000_000_000:
-                return f"{num / 1_000_000_000:.2f} млрд"
+                return f"{sign}{num / 1_000_000_000:.2f} млрд"
             elif num >= 1_000_000:
-                return f"{num / 1_000_000:.2f} млн"
+                return f"{sign}{num / 1_000_000:.2f} млн"
             elif num >= 1_000:
-                return f"{num / 1_000:.2f} тыс"
+                return f"{sign}{num / 1_000:.2f} тыс"
             else:
-                return f"{num:.0f}"
+                return f"{sign}{num:.0f}"
         except Exception:
             return str(value) if value else "0"
 
