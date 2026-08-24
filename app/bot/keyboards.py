@@ -47,17 +47,44 @@ def get_report_actions_keyboard(report_id: int) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_history_keyboard(page: int = 0, total_pages: int = 1) -> InlineKeyboardMarkup:
-    """Клавиатура для пагинации истории"""
+def get_history_keyboard(
+        reports,
+        selected_inns: set,
+        page: int = 0,
+        total_pages: int = 1
+) -> InlineKeyboardMarkup:
+    """
+    Клавиатура истории: пагинация + отметка компаний для сравнения.
+    По кнопке-строке на каждый отчет (чекбокс + название), затем навигация
+    и, если что-то выбрано, кнопки запуска/сброса сравнения.
+    """
     builder = InlineKeyboardBuilder()
 
-    if page > 0:
-        builder.button(text="◀️ Назад", callback_data=f"history_page:{page - 1}")
-    if page < total_pages - 1:
-        builder.button(text="Вперед ▶️", callback_data=f"history_page:{page + 1}")
+    for report in reports:
+        checked = "✅" if report.inn in selected_inns else "⬜"
+        label = f"{checked} {report.company_name or report.inn}"
+        builder.row(InlineKeyboardButton(
+            text=label[:60],
+            callback_data=f"toggle_compare:{report.inn}:{page}"
+        ))
 
-    builder.button(text="🔄 Обновить", callback_data="history_refresh")
-    builder.adjust(2, 1)
+    nav_row = []
+    if page > 0:
+        nav_row.append(InlineKeyboardButton(text="◀️ Назад", callback_data=f"history_page:{page - 1}"))
+    if page < total_pages - 1:
+        nav_row.append(InlineKeyboardButton(text="Вперед ▶️", callback_data=f"history_page:{page + 1}"))
+    if nav_row:
+        builder.row(*nav_row)
+
+    builder.row(InlineKeyboardButton(text="🔄 Обновить", callback_data=f"history_refresh:{page}"))
+
+    if selected_inns:
+        builder.row(InlineKeyboardButton(
+            text=f"🔀 Сравнить выбранные ({len(selected_inns)})",
+            callback_data="run_compare"
+        ))
+        builder.row(InlineKeyboardButton(text="❌ Сбросить выбор", callback_data="clear_compare"))
+
     return builder.as_markup()
 
 

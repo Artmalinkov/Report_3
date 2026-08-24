@@ -5,7 +5,7 @@
 """
 import os
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
@@ -15,6 +15,7 @@ from aiogram.types import (
     Message,
     CallbackQuery,
     FSInputFile,
+    InlineKeyboardMarkup,
     ReplyKeyboardRemove
 )
 from aiogram.exceptions import TelegramBadRequest
@@ -32,8 +33,12 @@ from app.database.crud import user_crud, report_crud, cache_crud
 from app.services.fns_client import FNSClient
 from app.services.ionet_client import IONETClient
 from app.services.report_generator import ReportGenerator
-from app.utils.validators import validate_inn
+from app.utils.validators import validate_inn, extract_inns
 from app.config import settings
+
+# Ограничения для сравнения компаний
+MAX_COMPARE_COMPANIES = 5
+HISTORY_PAGE_SIZE = 5
 
 # Известные ИНН для тестирования
 TEST_INNS = {
@@ -99,10 +104,15 @@ async def cmd_help(message: Message, state: FSMContext):
         "3️⃣ ИИ проанализирует финансовую отчетность\n"
         "4️⃣ Вы получите HTML-отчет с результатами\n\n"
         "✅ <b>Пример ИНН:</b> 7707083893\n\n"
+        "🔀 <b>Сравнение компаний:</b>\n"
+        "Отправьте несколько ИНН через запятую или пробел\n"
+        "(например: <code>7707083893, 7702070139</code>) — до "
+        f"{MAX_COMPARE_COMPANIES} компаний за раз.\n"
+        "Также можно отметить компании прямо в /history.\n\n"
         "📊 <b>Команды:</b>\n"
         "/start - Приветствие\n"
         "/help - Эта справка\n"
-        "/history - История запросов (последние 10)\n"
+        "/history - История запросов и выбор для сравнения\n"
         "/stats - Ваша статистика\n\n"
         "🔍 <b>Дополнительно:</b>\n"
         "• Отчеты сохраняются в вашей истории\n"
@@ -137,26 +147,33 @@ async def cmd_stats(message: Message, state: FSMContext):
     )
 
 
-@router.message(Command("history"))
-async def cmd_history(message: Message, state: FSMContext):
-    """Обработчик команды /history - история запросов"""
-    await state.clear()
+async def _render_history(
+        user_id: int,
+        state: FSMContext,
+        page: int = 0
+) -> Optional[Tuple[str, InlineKeyboardMarkup]]:
+    """
+    Готовит текст и клавиатуру для страницы истории (с чекбоксами выбора
+    компаний для сравнения). Возвращает None, если у пользователя вообще
+    нет отчетов.
+    """
+    total = await report_crud.get_user_reports_count(user_id)
+    if total == 0:
+        return None
 
+    total_pages = max(1, -(-total // HISTORY_PAGE_SIZE))  # деление с округлением вверх
+    page = max(0, min(page, total_pages - 1))
     reports = await report_crud.get_user_reports(
-        user_id=message.from_user.id,
-        limit=10
+        user_id=user_id,
+        limit=HISTORY_PAGE_SIZE,
+        offset=page * HISTORY_PAGE_SIZE
     )
 
-    if not reports:
-        await message.answer(
-            "📭 У вас пока нет запросов.\n\n"
-            "Отправьте ИНН для получения первого отчета!",
-            reply_markup=main_keyboard
-        )
-        return
+    data = await state.get_data()
+    selected = set(data.get("compare_selection", []))
 
-    text = "📚 <b>Ваша история запросов:</b>\n\n"
-    for i, report in enumerate(reports, 1):
+    text = f"📚 <b>Ваша история запросов</b> (стр. {page + 1}/{total_pages}):\n\n"
+    for i, report in enumerate(reports, start=page * HISTORY_PAGE_SIZE + 1):
         company = report.company_name or "Неизвестно"
         date = report.created_at.strftime('%d.%m.%Y %H:%M')
         risk_emoji = "🟢" if report.risk_level == "Низкий" else "🟡" if report.risk_level == "Средний" else "🔴"
@@ -164,10 +181,31 @@ async def cmd_history(message: Message, state: FSMContext):
         text += f"   ИНН: <code>{report.inn}</code>\n"
         text += f"   📅 {date} | {risk_emoji} {report.risk_level or 'Н/Д'}\n\n"
 
-    await message.answer(
-        text,
-        reply_markup=main_keyboard
+    text += (
+        f"☑️ Выбрано для сравнения: {len(selected)}\n\n" if selected else "\n"
     )
+    text += "Отметьте компании ниже, чтобы сравнить их между собой (нужно минимум 2)."
+
+    keyboard = get_history_keyboard(reports, selected, page, total_pages)
+    return text, keyboard
+
+
+@router.message(Command("history"))
+async def cmd_history(message: Message, state: FSMContext):
+    """Обработчик команды /history - история запросов"""
+    await state.clear()  # свежий вход в историю сбрасывает и FSM, и выбор для сравнения
+
+    rendered = await _render_history(message.from_user.id, state, page=0)
+    if not rendered:
+        await message.answer(
+            "📭 У вас пока нет запросов.\n\n"
+            "Отправьте ИНН для получения первого отчета!",
+            reply_markup=main_keyboard
+        )
+        return
+
+    text, keyboard = rendered
+    await message.answer(text, reply_markup=keyboard)
 
 
 @router.message(F.text == "📊 Моя статистика")
@@ -206,10 +244,10 @@ async def btn_about(message: Message, state: FSMContext):
         "📊 <b>Функции:</b>\n"
         "• Анализ финансовой отчетности\n"
         "• ИИ-анализ финансовых показателей\n"
+        "• Сравнение нескольких компаний\n"
         "• Генерация HTML-отчетов\n"
         "• Сохранение истории запросов\n\n"
         "💡 <b>Идеи для улучшения:</b>\n"
-        "• Сравнение компаний\n"
         "• Графики и диаграммы\n"
         "• PDF-отчеты",
         reply_markup=main_keyboard
@@ -230,10 +268,42 @@ async def btn_cancel(message: Message, state: FSMContext):
 # ОБРАБОТКА ИНН
 # ============================================
 
+async def _fetch_financial_data(inn: str) -> Dict[str, Any]:
+    """
+    Получение финансовых данных по ИНН с проверкой кеша (24 часа).
+    Общая логика для одиночного отчета и для сравнения компаний.
+    """
+    cache_key = f"fns:{inn}"
+    cached_data = await cache_crud.get_cache(cache_key)
+
+    if cached_data:
+        logger.info(f"Данные для ИНН {inn} получены из кеша")
+        return cached_data
+
+    financial_data = await fns_client.get_financial_report(inn)
+    await cache_crud.set_cache(
+        cache_key=cache_key,
+        cache_type="fns",
+        data=financial_data,
+        expires_in_seconds=86400,  # 24 часа
+        inn=inn
+    )
+    return financial_data
+
+
 @router.message(StateFilter(default_state), F.text)
 async def handle_inn(message: Message, state: FSMContext):
-    """Обработка текстовых сообщений (ИНН)"""
-    inn = message.text.strip()
+    """Обработка текстовых сообщений (ИНН или несколько ИНН для сравнения)"""
+    text = message.text.strip()
+
+    # Несколько ИНН в одном сообщении (через запятую/пробел/перенос строки) -
+    # запрос на сравнение компаний
+    inns = extract_inns(text)
+    if len(inns) >= 2:
+        await run_comparison(message, state, message.from_user.id, inns)
+        return
+
+    inn = text
 
     # Валидация ИНН
     if not validate_inn(inn):
@@ -241,6 +311,8 @@ async def handle_inn(message: Message, state: FSMContext):
             "❌ <b>Неверный ИНН</b>\n\n"
             "ИНН должен содержать 10 или 12 цифр.\n"
             "Пример: 7707083893\n\n"
+            "Чтобы сравнить несколько компаний, отправьте их ИНН через запятую\n"
+            "или пробел, например: <code>7707083893, 7702070139</code>\n\n"
             "📋 <b>Тестовые ИНН:</b>\n"
             "• 7707083893 - Сбербанк\n"
             "• 7702070139 - Газпром\n"
@@ -261,24 +333,7 @@ async def handle_inn(message: Message, state: FSMContext):
     )
 
     try:
-        # 1. Проверяем кеш
-        cache_key = f"fns:{inn}"
-        cached_data = await cache_crud.get_cache(cache_key)
-
-        if cached_data:
-            logger.info(f"Данные для ИНН {inn} получены из кеша")
-            financial_data = cached_data
-        else:
-            # 2. Получение данных из ФНС
-            financial_data = await fns_client.get_financial_report(inn)
-            # Сохраняем в кеш на 24 часа
-            await cache_crud.set_cache(
-                cache_key=cache_key,
-                cache_type="fns",
-                data=financial_data,
-                expires_in_seconds=86400,  # 24 часа
-                inn=inn
-            )
+        financial_data = await _fetch_financial_data(inn)
 
         # Пытаемся обновить сообщение, если оно еще существует
         try:
@@ -398,6 +453,137 @@ async def handle_inn(message: Message, state: FSMContext):
 
 
 # ============================================
+# СРАВНЕНИЕ КОМПАНИЙ
+# ============================================
+
+async def run_comparison(message: Message, state: FSMContext, user_id: int, inns: List[str]):
+    """
+    Сравнение нескольких компаний: получение данных по каждому ИНН,
+    сравнительный AI-анализ и единый HTML-отчет. Используется и из
+    текстового ввода (несколько ИНН в одном сообщении), и из выбора
+    компаний в /history.
+
+    user_id передается явно, а не берется из message.from_user: при вызове
+    из callback-обработчика message — это сообщение бота (с историей), и
+    message.from_user там оказался бы самим ботом, а не человеком, нажавшим
+    кнопку.
+    """
+    if len(inns) > MAX_COMPARE_COMPANIES:
+        await message.answer(
+            f"ℹ️ Указано {len(inns)} ИНН, для сравнения беру первые {MAX_COMPARE_COMPANIES}."
+        )
+        inns = inns[:MAX_COMPARE_COMPANIES]
+
+    valid_inns = [inn for inn in inns if validate_inn(inn)]
+    invalid_inns = [inn for inn in inns if inn not in valid_inns]
+
+    if invalid_inns:
+        await message.answer(
+            "⚠️ Пропущены некорректные ИНН: " + ", ".join(f"<code>{i}</code>" for i in invalid_inns)
+        )
+
+    if len(valid_inns) < 2:
+        await message.answer(
+            "❌ <b>Недостаточно компаний для сравнения</b>\n\n"
+            "Нужно минимум 2 корректных ИНН.",
+            reply_markup=main_keyboard
+        )
+        return
+
+    await user_crud.increment_requests(user_id)
+
+    status_msg = await message.answer(
+        f"🔍 <i>Получаю данные из ФНС по {len(valid_inns)} компаниям...</i>\n"
+        "⏳ Это может занять до минуты",
+        reply_markup=get_cancel_keyboard()
+    )
+
+    companies: List[Dict[str, Any]] = []
+    failed: List[str] = []
+
+    for inn in valid_inns:
+        try:
+            companies.append(await _fetch_financial_data(inn))
+        except ValueError:
+            failed.append(f"{inn} — компания не найдена в ФНС")
+        except Exception as e:
+            logger.error(f"Ошибка при получении данных для сравнения (ИНН {inn}): {e}")
+            failed.append(f"{inn} — ошибка получения данных")
+
+    if len(companies) < 2:
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+        text = "❌ <b>Не удалось собрать данные для сравнения</b>\n\n"
+        if failed:
+            text += "\n".join(failed)
+        await message.answer(text, reply_markup=main_keyboard)
+        return
+
+    try:
+        try:
+            await status_msg.edit_text("🧠 <i>Сравниваю компании с помощью AI...</i>")
+        except Exception:
+            status_msg = await message.answer("🧠 <i>Сравниваю компании с помощью AI...</i>")
+
+        comparison = await ionet_client.analyze_comparison(companies)
+
+        try:
+            await status_msg.edit_text("📄 <i>Формирую сравнительный отчет...</i>")
+        except Exception:
+            status_msg = await message.answer("📄 <i>Формирую сравнительный отчет...</i>")
+
+        html_path, html_content = await report_generator.generate_comparison_report(
+            companies=companies,
+            comparison=comparison
+        )
+
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+
+        names = ", ".join(c.get("company_name", "?") for c in companies)
+        document = FSInputFile(
+            path=html_path,
+            filename=f"comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+        )
+
+        caption = f"✅ <b>Сравнение готово!</b>\n\n🏢 {names}\n\n"
+        if failed:
+            caption += "⚠️ Не удалось получить: " + "; ".join(failed) + "\n\n"
+        caption += "💾 Полный текст сравнения — в отчете и следующем сообщении"
+
+        await message.answer_document(document, caption=caption, reply_markup=main_keyboard)
+
+        leader = comparison.get("leader", "")
+        summary = comparison.get("summary", "")
+        await message.answer(
+            f"📊 <b>Итог сравнения:</b>\n\n{summary}\n\n🏆 <b>Лидер:</b> {leader}",
+            reply_markup=main_keyboard
+        )
+
+        logger.info(f"Сравнительный отчет для {[c.get('inn') for c in companies]} создан пользователем {user_id}")
+
+    except Exception as e:
+        logger.error(f"Ошибка при сравнении компаний {valid_inns}: {e}")
+        try:
+            await status_msg.edit_text(
+                f"❌ <b>Произошла ошибка при сравнении:</b>\n\n{str(e)}"
+            )
+        except Exception:
+            await message.answer(
+                f"❌ <b>Произошла ошибка при сравнении:</b>\n\n{str(e)}",
+                reply_markup=main_keyboard
+            )
+
+    finally:
+        await state.update_data(compare_selection=[])
+        await state.set_state(None)
+
+
+# ============================================
 # ОБРАБОТКА CALLBACK
 # ============================================
 
@@ -466,11 +652,80 @@ async def callback_delete_report(callback: CallbackQuery):
     await callback.answer("✅ Отчет удален")
 
 
-@router.callback_query(F.data == "history_refresh")
-async def callback_history_refresh(callback: CallbackQuery):
-    """Обновление истории"""
-    await cmd_history(callback.message, None)
+async def _update_history_message(callback: CallbackQuery, state: FSMContext, page: int):
+    """Перерисовывает сообщение с историей на месте (без спама новыми сообщениями)"""
+    rendered = await _render_history(callback.from_user.id, state, page)
+    if not rendered:
+        await callback.message.edit_text(
+            "📭 У вас пока нет запросов.\n\nОтправьте ИНН для получения первого отчета!"
+        )
+        return
+    text, keyboard = rendered
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    except TelegramBadRequest:
+        pass  # текст не изменился — Telegram не даст отредактировать тем же содержимым
+
+
+@router.callback_query(F.data.startswith("history_page:"))
+async def callback_history_page(callback: CallbackQuery, state: FSMContext):
+    """Переход на другую страницу истории"""
+    page = int(callback.data.split(":")[1])
+    await _update_history_message(callback, state, page)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("history_refresh:"))
+async def callback_history_refresh(callback: CallbackQuery, state: FSMContext):
+    """Обновление текущей страницы истории"""
+    page = int(callback.data.split(":")[1])
+    await _update_history_message(callback, state, page)
     await callback.answer("✅ История обновлена")
+
+
+@router.callback_query(F.data.startswith("toggle_compare:"))
+async def callback_toggle_compare(callback: CallbackQuery, state: FSMContext):
+    """Отметить/снять компанию для сравнения"""
+    _, inn, page = callback.data.split(":")
+    page = int(page)
+
+    data = await state.get_data()
+    selected = set(data.get("compare_selection", []))
+    if inn in selected:
+        selected.discard(inn)
+    else:
+        if len(selected) >= MAX_COMPARE_COMPANIES:
+            await callback.answer(
+                f"Максимум {MAX_COMPARE_COMPANIES} компаний для сравнения", show_alert=True
+            )
+            return
+        selected.add(inn)
+    await state.update_data(compare_selection=list(selected))
+
+    await _update_history_message(callback, state, page)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "clear_compare")
+async def callback_clear_compare(callback: CallbackQuery, state: FSMContext):
+    """Сбросить выбор компаний для сравнения"""
+    await state.update_data(compare_selection=[])
+    await _update_history_message(callback, state, page=0)
+    await callback.answer("Выбор сброшен")
+
+
+@router.callback_query(F.data == "run_compare")
+async def callback_run_compare(callback: CallbackQuery, state: FSMContext):
+    """Запуск сравнения выбранных в истории компаний"""
+    data = await state.get_data()
+    selected = list(data.get("compare_selection", []))
+
+    if len(selected) < 2:
+        await callback.answer("Выберите минимум 2 компании", show_alert=True)
+        return
+
+    await callback.answer()
+    await run_comparison(callback.message, state, callback.from_user.id, selected)
 
 
 @router.message()

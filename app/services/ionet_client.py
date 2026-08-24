@@ -7,10 +7,32 @@ import aiohttp
 import asyncio
 import json
 import re
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from loguru import logger
 
 from app.config import settings
+
+# Метки секций структурированного ответа ИИ. Ключ — вариант написания
+# заголовка, значение — канонический ключ секции в возвращаемом словаре;
+# несколько вариантов могут схлопываться в один ключ (например, модель
+# иногда пишет просто "Финансовое" без "состояние").
+SINGLE_ANALYSIS_LABELS = {
+    "ФИНАНСОВОЕ СОСТОЯНИЕ": "ФИНАНСОВОЕ СОСТОЯНИЕ",
+    "ФИНАНСОВОЕ": "ФИНАНСОВОЕ СОСТОЯНИЕ",
+    "КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ": "КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ",
+    "ПОКАЗАТЕЛИ": "КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ",
+    "РИСКИ": "РИСКИ",
+    "РЕКОМЕНДАЦИИ": "РЕКОМЕНДАЦИИ",
+    "УРОВЕНЬ РИСКА": "УРОВЕНЬ РИСКА",
+}
+
+COMPARISON_LABELS = {
+    "ОБЩИЙ ВЫВОД": "ОБЩИЙ ВЫВОД",
+    "ЛИДЕР": "ЛИДЕР",
+    "РАЗЛИЧИЯ И РИСКИ": "РАЗЛИЧИЯ И РИСКИ",
+    "РАЗЛИЧИЯ": "РАЗЛИЧИЯ И РИСКИ",
+    "РЕКОМЕНДАЦИЯ": "РЕКОМЕНДАЦИЯ",
+}
 
 
 class IONETClient:
@@ -203,7 +225,7 @@ class IONETClient:
             content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
 
             # Разбиваем на секции
-            sections = self._parse_sections(content)
+            sections = self._parse_sections(content, SINGLE_ANALYSIS_LABELS)
 
             # Определяем уровень риска
             risk_level = self._determine_risk_level(content, sections)
@@ -240,60 +262,42 @@ class IONETClient:
         cleaned = cleaned.strip('*: \t')
         return cleaned.upper()
 
-    def _parse_sections(self, content: str) -> Dict[str, str]:
+    def _parse_sections(self, content: str, label_map: Dict[str, str]) -> Dict[str, str]:
         """
-        Разбиение текста на секции
+        Разбиение текста на секции по карте меток {вариант_заголовка: канонический_ключ}.
+
+        Заголовком считается только строка, которая НАЧИНАЕТСЯ с одного из
+        вариантов (после очистки от markdown/нумерации в _heading_candidate)
+        — иначе обычное предложение вида "...могут возникать риски в
+        случае..." само обрывает текущую секцию, едва начавшись. Варианты
+        сравниваются от самого длинного к самому короткому, чтобы более
+        специфичный ("ФИНАНСОВОЕ СОСТОЯНИЕ") матчился раньше своего же
+        префикса ("ФИНАНСОВОЕ"), если оба есть в карте.
         """
+        variants = sorted(label_map.keys(), key=len, reverse=True)
         sections = {}
-        current_section = None
+        current_key = None
         current_content = []
 
-        lines = content.split('\n')
-        for line in lines:
+        for line in content.split('\n'):
             line = line.strip()
             if not line:
                 continue
 
-            # Заголовком считаем только строку, которая НАЧИНАЕТСЯ с одной из
-            # меток (после очистки от markdown/нумерации) — иначе обычное
-            # предложение вида "...могут возникать риски в случае..." само
-            # обрывает текущую секцию, едва начавшись
             heading = self._heading_candidate(line)
-            if any(heading.startswith(section) for section in [
-                "ФИНАНСОВОЕ СОСТОЯНИЕ", "КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ",
-                "РИСКИ", "РЕКОМЕНДАЦИИ", "УРОВЕНЬ РИСКА"
-            ]):
-                if current_section and current_content:
-                    sections[current_section] = '\n'.join(current_content).strip()
-                current_section = self._get_section_key(heading)
+            matched = next((v for v in variants if heading.startswith(v)), None)
+            if matched:
+                if current_key and current_content:
+                    sections[current_key] = '\n'.join(current_content).strip()
+                current_key = label_map[matched]
                 current_content = []
-            else:
-                if current_section:
-                    current_content.append(line)
+            elif current_key:
+                current_content.append(line)
 
-        # Добавляем последнюю секцию
-        if current_section and current_content:
-            sections[current_section] = '\n'.join(current_content).strip()
+        if current_key and current_content:
+            sections[current_key] = '\n'.join(current_content).strip()
 
         return sections
-
-    def _get_section_key(self, heading: str) -> str:
-        """
-        Определение ключа секции по уже очищенному (см. _heading_candidate)
-        заголовку. Порядок проверок важен: "УРОВЕНЬ РИСКА" должен проверяться
-        раньше "РИСКИ", иначе строка "Уровень риска" никогда до него не дойдет.
-        """
-        if heading.startswith("УРОВЕНЬ РИСКА"):
-            return "УРОВЕНЬ РИСКА"
-        elif heading.startswith("ФИНАНСОВОЕ СОСТОЯНИЕ") or heading.startswith("ФИНАНСОВОЕ"):
-            return "ФИНАНСОВОЕ СОСТОЯНИЕ"
-        elif heading.startswith("КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ") or heading.startswith("ПОКАЗАТЕЛИ"):
-            return "КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ"
-        elif heading.startswith("РИСКИ"):
-            return "РИСКИ"
-        elif heading.startswith("РЕКОМЕНДАЦИИ"):
-            return "РЕКОМЕНДАЦИИ"
-        return "ДРУГОЕ"
 
     def _determine_risk_level(self, content: str, sections: Dict[str, str]) -> str:
         """
@@ -342,6 +346,97 @@ class IONETClient:
             "risk_level": risk_level,
             "full_response": "Анализ выполнен с использованием базовых метрик"
         }
+
+    def _get_mock_comparison(self, companies: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Оффлайн-сравнение при недоступности IO_NET"""
+
+        def revenue_of(c: Dict[str, Any]) -> float:
+            return self._safe_float(c.get("profit_loss", {}).get("revenue", "0"))
+
+        leader = max(companies, key=revenue_of)
+        names = ", ".join(c.get("company_name", "?") for c in companies)
+
+        return {
+            "summary": f"Сравнение выполнено по базовым метрикам (режим оффлайн) для: {names}.",
+            "leader": f"{leader.get('company_name', '?')} — наибольшая выручка среди сравниваемых компаний.",
+            "differences": "Детальное сравнение рисков недоступно в оффлайн-режиме.",
+            "recommendation": "Для полноценного AI-сравнения повторите запрос позже.",
+            "full_response": "Сравнение выполнено на основе базовых метрик (режим оффлайн)",
+        }
+
+    def _build_comparison_prompt(self, companies: List[Dict[str, Any]]) -> str:
+        """Построение промпта для сравнения нескольких компаний"""
+        blocks = []
+        for c in companies:
+            balance = c.get("balance", {})
+            profit_loss = c.get("profit_loss", {})
+            blocks.append(
+                f"### {c.get('company_name', 'Неизвестная компания')} "
+                f"(ИНН: {c.get('inn', '')}, период: {c.get('period', '')})\n"
+                f"- Активы: {balance.get('assets', '0')} руб.\n"
+                f"- Собственный капитал: {balance.get('capital', '0')} руб.\n"
+                f"- Выручка: {profit_loss.get('revenue', '0')} руб.\n"
+                f"- Прибыль до налогообложения: {profit_loss.get('profit', '0')} руб.\n"
+                f"- Чистая прибыль: {profit_loss.get('net_profit', '0')} руб."
+            )
+        companies_block = "\n\n".join(blocks)
+
+        return f"""
+Сравни финансовое состояние следующих {len(companies)} компаний по данным бухгалтерской отчетности:
+
+{companies_block}
+
+Предоставь сравнительный анализ в следующем формате:
+
+1. ОБЩИЙ ВЫВОД (краткое резюме сравнения)
+2. ЛИДЕР (какая компания выглядит финансово сильнее и почему, или отметь, что явного лидера нет)
+3. РАЗЛИЧИЯ И РИСКИ (ключевые различия между компаниями и риски каждой)
+4. РЕКОМЕНДАЦИЯ (практический вывод для того, кто сравнивает эти компании)
+
+Будь объективен, используй профессиональную терминологию, но объясняй доступно.
+"""
+
+    def _parse_comparison_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
+        """Парсинг ответа ИИ на сравнительный запрос"""
+        try:
+            content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            sections = self._parse_sections(content, COMPARISON_LABELS)
+
+            return {
+                "summary": sections.get("ОБЩИЙ ВЫВОД", "Сравнение не выполнено"),
+                "leader": sections.get("ЛИДЕР", ""),
+                "differences": sections.get("РАЗЛИЧИЯ И РИСКИ", ""),
+                "recommendation": sections.get("РЕКОМЕНДАЦИЯ", ""),
+                "full_response": content,
+            }
+        except Exception as e:
+            logger.error(f"Ошибка парсинга сравнительного ответа IO_NET: {e}")
+            return {
+                "summary": "Ошибка при сравнении данных",
+                "leader": "",
+                "differences": "",
+                "recommendation": "",
+                "full_response": str(response),
+            }
+
+    async def analyze_comparison(self, companies: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Сравнительный анализ нескольких компаний с помощью ИИ
+        """
+        logger.info(f"Начало сравнительного анализа {len(companies)} компаний через IO_NET")
+
+        try:
+            prompt = self._build_comparison_prompt(companies)
+            response = await self._send_request(prompt)
+            analysis = self._parse_comparison_response(response)
+
+            logger.info("Сравнительный анализ успешно завершен")
+            return analysis
+
+        except (aiohttp.ClientError, asyncio.TimeoutError, Exception) as e:
+            logger.error(f"Ошибка при сравнительном анализе через IO_NET: {e}")
+            logger.info("Использовано оффлайн-сравнение")
+            return self._get_mock_comparison(companies)
 
     async def analyze_text(self, text: str) -> str:
         """

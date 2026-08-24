@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сравнение компаний</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #2c3e50;
+            font-size: 28px;
+        }
+        .header .meta {
+            color: #7f8c8d;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+        .section {
+            margin: 30px 0;
+        }
+        .section h2 {
+            color: #2c3e50;
+            border-left: 4px solid #4CAF50;
+            padding-left: 12px;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        .table-scroll {
+            overflow-x: auto;
+        }
+        table.compare {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 500px;
+        }
+        table.compare th, table.compare td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid #ecf0f1;
+        }
+        table.compare th {
+            background: #f8f9fa;
+            color: #2c3e50;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        table.compare td.metric-label {
+            color: #7f8c8d;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        table.compare td.value {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .analysis-text {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            line-height: 1.8;
+            margin: 10px 0;
+        }
+        .analysis-text p {
+            margin: 8px 0;
+            white-space: pre-line;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ecf0f1;
+            text-align: center;
+            font-size: 12px;
+            color: #95a5a6;
+        }
+        @media (max-width: 600px) {
+            .container { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Сравнение компаний</h1>
+            <div class="meta">
+                {{ companies_count }} компании(й) | Дата: {{ report_date }}
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🏢 Компании</h2>
+            <div class="table-scroll">
+                <table class="compare">
+                    <tr>
+                        <th>Показатель</th>
+                        {% for c in companies %}
+                        <th>{{ c.company_name }}<br><span style="font-weight:normal;">ИНН {{ c.inn }}</span></th>
+                        {% endfor %}
+                    </tr>
+                    <tr>
+                        <td class="metric-label">Период</td>
+                        {% for c in companies %}<td>{{ c.period }}</td>{% endfor %}
+                    </tr>
+                    <tr>
+                        <td class="metric-label">Статус</td>
+                        {% for c in companies %}<td>{{ c.status }}</td>{% endfor %}
+                    </tr>
+                    <tr>
+                        <td class="metric-label">Выручка</td>
+                        {% for c in companies %}<td class="value">{{ c.revenue }}</td>{% endfor %}
+                    </tr>
+                    <tr>
+                        <td class="metric-label">Чистая прибыль</td>
+                        {% for c in companies %}<td class="value">{{ c.net_profit }}</td>{% endfor %}
+                    </tr>
+                    <tr>
+                        <td class="metric-label">Активы</td>
+                        {% for c in companies %}<td class="value">{{ c.assets }}</td>{% endfor %}
+                    </tr>
+                    <tr>
+                        <td class="metric-label">Собственный капитал</td>
+                        {% for c in companies %}<td class="value">{{ c.capital }}</td>{% endfor %}
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🧠 Сравнительный анализ ИИ</h2>
+            <div class="analysis-text">
+                <h3>Общий вывод</h3>
+                <p>{{ summary }}</p>
+
+                <h3 style="margin-top:15px;">Лидер</h3>
+                <p>{{ leader }}</p>
+
+                <h3 style="margin-top:15px;">Различия и риски</h3>
+                <p>{{ differences }}</p>
+
+                <h3 style="margin-top:15px;">Рекомендация</h3>
+                <p>{{ recommendation }}</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            Отчет создан автоматически с использованием ИИ Report_v_4<br>
+            {{ report_date }}
+        </div>
+    </div>
+</body>
+</html>

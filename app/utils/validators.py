@@ -2,6 +2,8 @@
 '''
 Валидация ИНН
 '''
+import re
+from typing import List
 
 
 def validate_inn(inn: str) -> bool:
@@ -67,6 +69,24 @@ def validate_inn_12(inn: str) -> bool:
     control_digit_2 = control_sum_2 % 11 % 10
 
     return control_digit_2 == int(inn[11])
+
+
+def extract_inns(text: str) -> List[str]:
+    """
+    Извлечение отдельных ИНН из одного сообщения, разделенных запятой,
+    пробелом или переносом строки — для запроса сравнения нескольких
+    компаний одним сообщением. Не проверяет контрольную сумму (это делает
+    validate_inn), только выделяет числовые токены нужной длины, сохраняя
+    порядок и убирая дубли.
+    """
+    tokens = re.split(r'[,\s]+', text.strip())
+    seen = set()
+    result = []
+    for token in tokens:
+        if token and token.isdigit() and len(token) in (10, 12) and token not in seen:
+            seen.add(token)
+            result.append(token)
+    return result
 
 
 def format_inn(inn: str) -> str:

@@ -5,8 +5,9 @@
 
 import os
 import json
+import re
 from pathlib import Path
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, List, Tuple
 from datetime import datetime
 from loguru import logger
 from jinja2 import Template
@@ -70,6 +71,78 @@ class ReportGenerator:
             logger.error(f"Ошибка при генерации отчета: {e}")
             raise
 
+    async def generate_comparison_report(
+            self,
+            companies: List[Dict[str, Any]],
+            comparison: Dict[str, Any]
+    ) -> Tuple[str, str]:
+        """
+        Генерация HTML-отчета сравнения нескольких компаний
+
+        Args:
+            companies: Список financial_data по каждой компании
+            comparison: Результат IONETClient.analyze_comparison
+
+        Returns:
+            Tuple[str, str]: (путь к файлу, HTML содержимое)
+        """
+        inns = "_".join(c.get("inn", "") for c in companies)
+        logger.info(f"Генерация сравнительного отчета для ИНН: {inns}")
+
+        try:
+            template_path = self.template_dir / "comparison_report_template.html"
+            with open(template_path, 'r', encoding='utf-8') as f:
+                template_content = f.read()
+
+            context = self._prepare_comparison_context(companies, comparison)
+
+            template = Template(template_content)
+            html_content = template.render(**context)
+
+            filename = f"comparison_{inns}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+            filepath = self.report_dir / filename
+
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+
+            logger.info(f"Сравнительный отчет сохранен: {filepath}")
+            return str(filepath), html_content
+
+        except Exception as e:
+            logger.error(f"Ошибка при генерации сравнительного отчета: {e}")
+            raise
+
+    def _prepare_comparison_context(
+            self,
+            companies: List[Dict[str, Any]],
+            comparison: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Подготовка данных для шаблона сравнения"""
+        rows = []
+        for c in companies:
+            balance = c.get("balance", {})
+            profit_loss = c.get("profit_loss", {})
+            rows.append({
+                "company_name": self._render_text(c.get("company_name", "Неизвестно")),
+                "inn": c.get("inn", ""),
+                "period": c.get("period", ""),
+                "status": self._render_text(c.get("status", "")),
+                "revenue": self._format_number(profit_loss.get("revenue", "0")),
+                "net_profit": self._format_number(profit_loss.get("net_profit", "0")),
+                "assets": self._format_number(balance.get("assets", "0")),
+                "capital": self._format_number(balance.get("capital", "0")),
+            })
+
+        return {
+            "companies": rows,
+            "companies_count": len(rows),
+            "report_date": datetime.now().strftime("%d.%m.%Y %H:%M"),
+            "summary": self._render_text(comparison.get("summary") or "Сравнение не выполнено"),
+            "leader": self._render_text(comparison.get("leader") or "Не определен"),
+            "differences": self._render_text(comparison.get("differences") or "Не выявлены"),
+            "recommendation": self._render_text(comparison.get("recommendation") or "Нет рекомендаций"),
+        }
+
     def _prepare_template_context(
             self,
             inn: str,
@@ -112,13 +185,13 @@ class ReportGenerator:
         }.get(risk_level, "🟡")
 
         return {
-            "company_name": financial_data.get("company_name", "Неизвестно"),
+            "company_name": self._render_text(financial_data.get("company_name", "Неизвестно")),
             "inn": inn,
             "ogrn": financial_data.get("ogrn", ""),
             "period": financial_data.get("period", "2024"),
             "report_date": datetime.now().strftime("%d.%m.%Y %H:%M"),
-            "status": financial_data.get("status", "Активна"),
-            "legal_address": financial_data.get("legal_address", ""),
+            "status": self._render_text(financial_data.get("status", "Активна")),
+            "legal_address": self._render_text(financial_data.get("legal_address", "")),
 
             # Финансовые показатели (форматированные)
             "revenue": self._format_number(revenue),
@@ -139,10 +212,10 @@ class ReportGenerator:
             "ebitda": self._format_number(get_safe_value(profit_loss, "ebitda", "0")),
 
             # Анализ ИИ
-            "analysis_summary": analysis.get("summary", "Анализ не выполнен"),
-            "key_metrics": analysis.get("key_metrics", ""),
-            "risks": analysis.get("risks", ""),
-            "recommendations": analysis.get("recommendations", ""),
+            "analysis_summary": self._render_text(analysis.get("summary", "Анализ не выполнен")),
+            "key_metrics": self._render_text(analysis.get("key_metrics", "")),
+            "risks": self._render_text(analysis.get("risks", "")),
+            "recommendations": self._render_text(analysis.get("recommendations", "")),
             "risk_level": risk_level,
             "risk_color": risk_color,
             "risk_emoji": risk_emoji,
@@ -150,6 +223,24 @@ class ReportGenerator:
             # Дополнительные метаданные
             "full_response": analysis.get("full_response", "")
         }
+
+    @staticmethod
+    def _render_text(text) -> str:
+        """
+        Подготовка текста (от ИИ или из данных ФНС) к вставке в HTML:
+        экранирует спецсимволы, чтобы сырой текст не превращался в разметку
+        страницы, и конвертирует markdown **жирный** в <strong> — модель
+        систематически форматирует ответы жирным текстом, а Jinja2-шаблон
+        вставляет строку как есть, без интерпретации markdown.
+        """
+        if not text:
+            return text
+        text = str(text)
+        text = (text.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;"))
+        text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+        return text
 
     @staticmethod
     def _safe_float(value) -> float:
