@@ -49,11 +49,11 @@ def test_inn_validator():
         print(f"   Формат: {formatted}")
         print()
 
+        assert result == expected, f"{description}: ожидалось {expected}, получено {result}"
+
     print("=" * 60)
     print(f"📊 ИТОГИ: ✅ {passed} пройдено, ❌ {failed} не пройдено")
     print("=" * 60)
-
-    return passed, failed
 
 
 if __name__ == "__main__":
