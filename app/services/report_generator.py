@@ -7,7 +7,7 @@ import os
 import json
 import re
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from loguru import logger
 from jinja2 import Template
@@ -20,6 +20,21 @@ class ReportGenerator:
         self.report_dir = Path(__file__).parent.parent.parent / "reports"
         self.template_dir = Path(__file__).parent.parent.parent / "templates"
         self.report_dir.mkdir(exist_ok=True)
+        self._chartjs_lib = self._load_chartjs()
+
+    def _load_chartjs(self) -> str:
+        """
+        Загружает вендоренную библиотеку Chart.js (templates/vendor/) один
+        раз и вставляет её содержимое в каждый отчет целиком — отчеты
+        рассылаются как самостоятельные HTML-файлы и должны открываться
+        без интернета, поэтому графики не тянутся с CDN
+        """
+        path = self.template_dir / "vendor" / "chart.umd.min.js"
+        try:
+            return path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            logger.warning("templates/vendor/chart.umd.min.js не найден — графики в отчетах не будут работать")
+            return ""
 
     async def generate_report(
             self,
@@ -133,6 +148,25 @@ class ReportGenerator:
                 "capital": self._format_number(balance.get("capital", "0")),
             })
 
+        # Данные для графиков Chart.js: те же ряды, что и в таблице выше,
+        # но сырыми числами (None для недоступных показателей — не рисуем
+        # их нулем, чтобы не выдавать "нет данных" за реальный ноль)
+        names = [row["company_name"] for row in rows]
+        revenue_points = [self._chart_point(c.get("profit_loss", {}).get("revenue")) for c in companies]
+        net_profit_points = [self._chart_point(c.get("profit_loss", {}).get("net_profit")) for c in companies]
+        assets_points = [self._chart_point(c.get("balance", {}).get("assets")) for c in companies]
+        capital_points = [self._chart_point(c.get("balance", {}).get("capital")) for c in companies]
+
+        def zero_if_none(v: Optional[float]) -> float:
+            return v if v is not None else 0.0
+
+        pl_scale, pl_unit = self._pick_scale(
+            [zero_if_none(v) for v in revenue_points + net_profit_points]
+        )
+        balance_scale, balance_unit = self._pick_scale(
+            [zero_if_none(v) for v in assets_points + capital_points]
+        )
+
         return {
             "companies": rows,
             "companies_count": len(rows),
@@ -141,6 +175,29 @@ class ReportGenerator:
             "leader": self._render_text(comparison.get("leader") or "Не определен"),
             "differences": self._render_text(comparison.get("differences") or "Не выявлены"),
             "recommendation": self._render_text(comparison.get("recommendation") or "Нет рекомендаций"),
+
+            # Графики
+            "chartjs_lib": self._chartjs_lib,
+            "has_pl_chart": any(v is not None for v in revenue_points + net_profit_points),
+            "pl_chart_json": json.dumps({
+                "labels": names,
+                "datasets": [
+                    {"label": "Выручка", "data": [round(zero_if_none(v) / pl_scale, 2) for v in revenue_points]},
+                    {"label": "Чистая прибыль",
+                     "data": [round(zero_if_none(v) / pl_scale, 2) for v in net_profit_points]},
+                ],
+                "unit": pl_unit,
+            }, ensure_ascii=False),
+            "has_balance_chart": any(v is not None for v in assets_points + capital_points),
+            "balance_chart_json": json.dumps({
+                "labels": names,
+                "datasets": [
+                    {"label": "Активы", "data": [round(zero_if_none(v) / balance_scale, 2) for v in assets_points]},
+                    {"label": "Капитал",
+                     "data": [round(zero_if_none(v) / balance_scale, 2) for v in capital_points]},
+                ],
+                "unit": balance_unit,
+            }, ensure_ascii=False),
         }
 
     def _prepare_template_context(
@@ -184,6 +241,31 @@ class ReportGenerator:
             "Высокий": "🔴"
         }.get(risk_level, "🟡")
 
+        # Данные для графиков Chart.js. Показатели, которых нет (например,
+        # себестоимость у банка — см. fns_client.py), просто не попадают
+        # на график вместо того чтобы рисоваться нулем
+        balance_points = [
+            (label, self._chart_point(get_safe_value(balance, key, "0")))
+            for label, key in [
+                ("Внеоборотные активы", "non_current_assets"),
+                ("Оборотные активы", "current_assets"),
+            ]
+        ]
+        balance_points = [(l, v) for l, v in balance_points if v is not None]
+
+        pl_points = [
+            (label, self._chart_point(get_safe_value(profit_loss, key, "0")))
+            for label, key in [
+                ("Выручка", "revenue"),
+                ("Валовая прибыль", "gross_profit"),
+                ("Чистая прибыль", "net_profit"),
+            ]
+        ]
+        pl_points = [(l, v) for l, v in pl_points if v is not None]
+
+        balance_scale, balance_unit = self._pick_scale([v for _, v in balance_points])
+        pl_scale, pl_unit = self._pick_scale([v for _, v in pl_points])
+
         return {
             "company_name": self._render_text(financial_data.get("company_name", "Неизвестно")),
             "inn": inn,
@@ -221,7 +303,22 @@ class ReportGenerator:
             "risk_emoji": risk_emoji,
 
             # Дополнительные метаданные
-            "full_response": analysis.get("full_response", "")
+            "full_response": analysis.get("full_response", ""),
+
+            # Графики
+            "chartjs_lib": self._chartjs_lib,
+            "has_balance_chart": len(balance_points) >= 2,
+            "balance_chart_json": json.dumps({
+                "labels": [l for l, _ in balance_points],
+                "values": [round(v / balance_scale, 2) for _, v in balance_points],
+                "unit": balance_unit,
+            }, ensure_ascii=False),
+            "has_pl_chart": len(pl_points) >= 2,
+            "pl_chart_json": json.dumps({
+                "labels": [l for l, _ in pl_points],
+                "values": [round(v / pl_scale, 2) for _, v in pl_points],
+                "unit": pl_unit,
+            }, ensure_ascii=False),
         }
 
     @staticmethod
@@ -241,6 +338,42 @@ class ReportGenerator:
                     .replace(">", "&gt;"))
         text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
         return text
+
+    @staticmethod
+    def _chart_point(raw) -> Optional[float]:
+        """
+        Числовое значение для графика, либо None если показатель недоступен
+        ("Н/Д" или пусто). Важно не путать с реальным нулем: отсутствующий
+        показатель (например, себестоимость у банка) исключается из графика,
+        а настоящий ноль — честно рисуется нулевым столбиком.
+        """
+        if raw is None:
+            return None
+        s = str(raw).strip()
+        if not s or s.upper() in ("Н/Д", "НЕТ ДАННЫХ"):
+            return None
+        try:
+            return float(s.replace(" ", "").replace(",", "."))
+        except (ValueError, TypeError):
+            return None
+
+    @staticmethod
+    def _pick_scale(values: List[float]) -> Tuple[float, str]:
+        """
+        Единый масштаб (делитель + подпись) для набора значений одного
+        графика — чтобы мелкие показатели не терялись рядом с одним
+        гигантским, а ось была подписана осмысленно (млн/млрд/трлн)
+        """
+        max_val = max((abs(v) for v in values), default=0)
+        if max_val >= 1_000_000_000_000:
+            return 1_000_000_000_000, "трлн ₽"
+        if max_val >= 1_000_000_000:
+            return 1_000_000_000, "млрд ₽"
+        if max_val >= 1_000_000:
+            return 1_000_000, "млн ₽"
+        if max_val >= 1_000:
+            return 1_000, "тыс ₽"
+        return 1, "₽"
 
     @staticmethod
     def _safe_float(value) -> float:
