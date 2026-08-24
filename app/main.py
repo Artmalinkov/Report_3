@@ -30,13 +30,13 @@ async def main():
         level=settings.LOG_LEVEL if hasattr(settings, 'LOG_LEVEL') else "INFO"
     )
     logger.add(
-        "logs/report3.log",
+        "logs/report_v_4.log",
         rotation="500 MB",
         retention="10 days",
         level=settings.LOG_LEVEL if hasattr(settings, 'LOG_LEVEL') else "INFO"
     )
 
-    logger.info("🚀 Запуск Report_3 бота...")
+    logger.info("🚀 Запуск Report_v_4 бота...")
     logger.info(f"📊 Режим: {'DEBUG' if settings.DEBUG else 'PRODUCTION'}")
 
     try:

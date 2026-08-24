@@ -74,7 +74,7 @@ async def cmd_start(message: Message, state: FSMContext):
     mode_text = "🔧 <b>Режим:</b> РАЗРАБОТКА (мок-данные)\n" if settings.DEBUG else ""
 
     await message.answer(
-        f"🏢 <b>Добро пожаловать в Report_3!</b>\n\n"
+        f"🏢 <b>Добро пожаловать в Report_v_4!</b>\n\n"
         f"{mode_text}"
         "Я помогу вам проанализировать финансовую отчетность компании по ИНН.\n\n"
         "📌 <b>Как использовать:</b>\n"
@@ -194,7 +194,7 @@ async def btn_about(message: Message, state: FSMContext):
     await state.clear()
 
     await message.answer(
-        "ℹ️ <b>О боте Report_3</b>\n\n"
+        "ℹ️ <b>О боте Report_v_4</b>\n\n"
         "🤖 <b>Версия:</b> 1.0.0\n"
         "📅 <b>Разработан:</b> 2024\n\n"
         "🔧 <b>Технологии:</b>\n"

@@ -136,7 +136,7 @@ if __name__ == "__main__":
 
     with open(output_file, 'w', encoding='utf-8') as f:
         sys.stdout = f
-        print("📁 ПОЛНАЯ СТРУКТУРА ПРОЕКТА Report_3")
+        print("📁 ПОЛНАЯ СТРУКТУРА ПРОЕКТА Report_v_4")
         print("=" * 70)
         print(f"Дата генерации: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}")
         print("=" * 70)

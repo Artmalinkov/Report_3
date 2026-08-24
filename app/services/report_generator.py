@@ -409,7 +409,7 @@ class ReportGenerator:
         </div>
 
         <div class="footer">
-            Отчет создан автоматически с использованием ИИ Report_3<br>
+            Отчет создан автоматически с использованием ИИ Report_v_4<br>
             {{ report_date }}
         </div>
     </div>

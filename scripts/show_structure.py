@@ -26,6 +26,6 @@ def print_structure(directory, prefix="", exclude_dirs=None):
 
 
 if __name__ == "__main__":
-    print("📁 Структура проекта Report_3:")
+    print("📁 Структура проекта Report_v_4:")
     print(".")
     print_structure("..")

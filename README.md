@@ -1,4 +1,4 @@
-# 📊 Report_3 — Финансовый анализ компаний через Telegram
+# 📊 Report_v_4 — Финансовый анализ компаний через Telegram
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![Aiogram](https://img.shields.io/badge/Aiogram-3.x-green.svg)](https://docs.aiogram.dev/)
@@ -53,7 +53,7 @@
 
 ```
 👤 Пользователь: /start
-🤖 Бот: 🏢 Добро пожаловать в Report_3!
+🤖 Бот: 🏢 Добро пожаловать в Report_v_4!
       Я помогу вам проанализировать финансовую отчетность компании по ИНН.
       Просто отправьте мне ИНН (10 или 12 цифр)
 
@@ -153,7 +153,7 @@
 ### Структура проекта
 
 ```
-report_3/
+report_v_4/
 ├── 📁 app/
 │   ├── 📁 bot/              # Обработчики команд и FSM
 │   │   ├── handlers.py      # Основные обработчики
@@ -212,8 +212,8 @@ report_3/
 #### 1. Клонирование репозитория
 
 ```bash
-git clone https://github.com/yourusername/report_3.git
-cd report_3
+git clone https://github.com/yourusername/report_v_4.git
+cd report_v_4
 ```
 
 #### 2. Создание виртуального окружения
@@ -382,7 +382,7 @@ docker-compose down
 
 ```text
 Пользователь: /start
-Бот: 🏢 Добро пожаловать в Report_3!
+Бот: 🏢 Добро пожаловать в Report_v_4!
      Я помогу вам проанализировать финансовую отчетность...
 
 Пользователь: 7707083893
@@ -592,7 +592,7 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: report3_db
+    container_name: report_v_4_db
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASS}
@@ -609,7 +609,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: report3_redis
+    container_name: report_v_4_redis
     ports:
       - "6379:6379"
     volumes:
@@ -622,7 +622,7 @@ services:
 
   bot:
     build: .
-    container_name: report3_bot
+    container_name: report_v_4_bot
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
       - DB_HOST=postgres
@@ -667,7 +667,7 @@ volumes:
 ```bash
 # 1. Форк репозитория
 # 2. Клонирование форка
-git clone https://github.com/yourusername/report_3.git
+git clone https://github.com/yourusername/report_v_4.git
 
 # 3. Создание ветки
 git checkout -b feature/amazing-feature
@@ -698,7 +698,7 @@ git push origin feature/amazing-feature
 ```text
 MIT License
 
-Copyright (c) 2024 Report_3
+Copyright (c) 2024 Report_v_4
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -727,8 +727,8 @@ SOFTWARE.
 |---------|--------|
 | 📧 Email | your.email@example.com |
 | 💬 Telegram | [@your_username](https://t.me/your_username) |
-| 🐛 Issues | [GitHub Issues](https://github.com/yourusername/report_3/issues) |
-| 📚 Документация | [Wiki](https://github.com/yourusername/report_3/wiki) |
+| 🐛 Issues | [GitHub Issues](https://github.com/yourusername/report_v_4/issues) |
+| 📚 Документация | [Wiki](https://github.com/yourusername/report_v_4/wiki) |
 
 ---
 
@@ -737,11 +737,11 @@ SOFTWARE.
 Если вам понравился проект, поставьте звезду ⭐ на GitHub!
 
 <p align="center">
-  <a href="https://github.com/yourusername/report_3">
-    <img src="https://img.shields.io/github/stars/yourusername/report_3?style=social" alt="GitHub stars">
+  <a href="https://github.com/yourusername/report_v_4">
+    <img src="https://img.shields.io/github/stars/yourusername/report_v_4?style=social" alt="GitHub stars">
   </a>
-  <a href="https://github.com/yourusername/report_3/network/members">
-    <img src="https://img.shields.io/github/forks/yourusername/report_3?style=social" alt="GitHub forks">
+  <a href="https://github.com/yourusername/report_v_4/network/members">
+    <img src="https://img.shields.io/github/forks/yourusername/report_v_4?style=social" alt="GitHub forks">
   </a>
 </p>
 
@@ -761,7 +761,7 @@ SOFTWARE.
 </p>
 
 <p align="center">
-  <i>Report_3 — Ваш надежный помощник в финансовом анализе</i>
+  <i>Report_v_4 — Ваш надежный помощник в финансовом анализе</i>
 </p>
 
 <p align="center">
