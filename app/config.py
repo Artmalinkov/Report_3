@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     # API Keys
     FNS_API_KEY: str
     IONET_API_KEY: str
-    IONET_API_URL: str = "https://api.ionet.ai/v1"
-    IONET_MODEL: str = "gpt-4o-mini"
+    IONET_API_URL: str = "https://api.intelligence.io.solutions/api/v1"
+    IONET_MODEL: str = "meta-llama/Llama-3.3-70B-Instruct"
 
     # App
     DEBUG: bool = False

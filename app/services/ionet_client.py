@@ -6,6 +6,7 @@
 import aiohttp
 import asyncio
 import json
+import re
 from typing import Dict, Any, Optional
 from loguru import logger
 
@@ -227,6 +228,18 @@ class IONETClient:
                 "full_response": str(response)
             }
 
+    @staticmethod
+    def _heading_candidate(line: str) -> str:
+        """
+        Снимает markdown-декорации ("**", "###", нумерацию "1.", ":") с начала
+        строки, чтобы отличить настоящий заголовок секции от обычного
+        предложения, которое просто упоминает слово вроде "риски" не в начале
+        """
+        cleaned = re.sub(r'^[#*\s]+', '', line.strip())
+        cleaned = re.sub(r'^\d+[.)]\s*', '', cleaned)
+        cleaned = cleaned.strip('*: \t')
+        return cleaned.upper()
+
     def _parse_sections(self, content: str) -> Dict[str, str]:
         """
         Разбиение текста на секции
@@ -241,15 +254,18 @@ class IONETClient:
             if not line:
                 continue
 
-            # Проверяем, является ли строка заголовком секции
-            upper_line = line.upper()
-            if any(section in upper_line for section in [
+            # Заголовком считаем только строку, которая НАЧИНАЕТСЯ с одной из
+            # меток (после очистки от markdown/нумерации) — иначе обычное
+            # предложение вида "...могут возникать риски в случае..." само
+            # обрывает текущую секцию, едва начавшись
+            heading = self._heading_candidate(line)
+            if any(heading.startswith(section) for section in [
                 "ФИНАНСОВОЕ СОСТОЯНИЕ", "КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ",
                 "РИСКИ", "РЕКОМЕНДАЦИИ", "УРОВЕНЬ РИСКА"
             ]):
                 if current_section and current_content:
                     sections[current_section] = '\n'.join(current_content).strip()
-                current_section = self._get_section_key(line)
+                current_section = self._get_section_key(heading)
                 current_content = []
             else:
                 if current_section:
@@ -261,21 +277,22 @@ class IONETClient:
 
         return sections
 
-    def _get_section_key(self, line: str) -> str:
+    def _get_section_key(self, heading: str) -> str:
         """
-        Определение ключа секции по заголовку
+        Определение ключа секции по уже очищенному (см. _heading_candidate)
+        заголовку. Порядок проверок важен: "УРОВЕНЬ РИСКА" должен проверяться
+        раньше "РИСКИ", иначе строка "Уровень риска" никогда до него не дойдет.
         """
-        upper_line = line.upper()
-        if "ФИНАНСОВОЕ СОСТОЯНИЕ" in upper_line or "ФИНАНСОВОЕ" in upper_line:
-            return "ФИНАНСОВОЕ СОСТОЯНИЕ"
-        elif "КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ" in upper_line or "ПОКАЗАТЕЛИ" in upper_line:
-            return "КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ"
-        elif "РИСКИ" in upper_line:
-            return "РИСКИ"
-        elif "РЕКОМЕНДАЦИИ" in upper_line:
-            return "РЕКОМЕНДАЦИИ"
-        elif "УРОВЕНЬ РИСКА" in upper_line or "РИСКА" in upper_line:
+        if heading.startswith("УРОВЕНЬ РИСКА"):
             return "УРОВЕНЬ РИСКА"
+        elif heading.startswith("ФИНАНСОВОЕ СОСТОЯНИЕ") or heading.startswith("ФИНАНСОВОЕ"):
+            return "ФИНАНСОВОЕ СОСТОЯНИЕ"
+        elif heading.startswith("КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ") or heading.startswith("ПОКАЗАТЕЛИ"):
+            return "КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ"
+        elif heading.startswith("РИСКИ"):
+            return "РИСКИ"
+        elif heading.startswith("РЕКОМЕНДАЦИИ"):
+            return "РЕКОМЕНДАЦИИ"
         return "ДРУГОЕ"
 
     def _determine_risk_level(self, content: str, sections: Dict[str, str]) -> str:

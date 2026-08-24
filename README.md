@@ -270,8 +270,8 @@ cp .env.example .env
 | `DB_PASS` | Пароль БД | ✅ | `secure_password` |
 | `FNS_API_KEY` | Ключ API ФНС | ✅ | `your_fns_key` |
 | `IONET_API_KEY` | Ключ API IO_NET | ✅ | `your_ionet_key` |
-| `IONET_API_URL` | URL API IO_NET | ❌ | `https://api.ionet.ai/v1` |
-| `IONET_MODEL` | Модель IO_NET | ❌ | `gpt-4o-mini` |
+| `IONET_API_URL` | URL API IO_NET | ❌ | `https://api.intelligence.io.solutions/api/v1` |
+| `IONET_MODEL` | Модель IO_NET | ❌ | `meta-llama/Llama-3.3-70B-Instruct` |
 | `DEBUG` | Режим отладки | ❌ | `True` |
 
 ### Пример .env
@@ -751,7 +751,7 @@ SOFTWARE.
 
 - [Aiogram](https://docs.aiogram.dev/) — за отличный фреймворк для ботов
 - [PostgreSQL](https://www.postgresql.org/) — за надежную базу данных
-- [IO_NET](https://ionet.ai/) — за мощный AI-анализ
+- [IO_NET](https://io.net/) — за мощный AI-анализ
 - [API ФНС](https://api-fns.ru/) — за доступ к финансовым данным
 
 ---
