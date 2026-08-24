@@ -185,7 +185,9 @@ class ReportGenerator:
             sign = "-" if num < 0 else ""
             num = abs(num)
 
-            if num >= 1_000_000_000:
+            if num >= 1_000_000_000_000:
+                return f"{sign}{num / 1_000_000_000_000:.2f} трлн"
+            elif num >= 1_000_000_000:
                 return f"{sign}{num / 1_000_000_000:.2f} млрд"
             elif num >= 1_000_000:
                 return f"{sign}{num / 1_000_000:.2f} млн"

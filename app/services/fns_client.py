@@ -35,6 +35,46 @@ PROFIT_LOSS_CODES = {
     "net_profit": "2400",
 }
 
+# Коды форм 0409806 "Бухгалтерский баланс (публикуемая форма)" и 0409807
+# "Отчет о финансовых результатах" для кредитных организаций (банков).
+# У api-fns.ru эти показатели, в отличие от обычных компаний, сгруппированы
+# по разделам (credit_assets, credit_passives и т.д.), а не лежат плоско.
+# Сопоставление кодов проверено арифметически на двух реальных банках:
+# сумма строк 1-13 credit_assets = строка 14 (Всего активов);
+# сумма строк 15-22 credit_passives = строка 23 (Всего обязательств);
+# строка14 - строка23 = credit_sources_of_own_income.36 (капитал, сходится
+# и как отдельная строка баланса, и как остаток по балансовому равенству);
+# credit_profit_and_loss: строка1 - строка2 = строка3 (проценты получены
+# минус проценты уплачены = чистый процентный доход), строка24 + строка25
+# = строка26 (прибыль за период после итоговой корректировки).
+# У банковской формы нет деления активов/обязательств на текущие и
+# долгосрочные (это отраслевой признак промышленных форм) — такие поля
+# оставляем недоступными, а не подменяем угаданной разбивкой.
+CREDIT_ASSETS_TOTAL = ("credit_assets", "14")
+CREDIT_EQUITY_TOTAL = ("credit_sources_of_own_income", "36")
+CREDIT_INTEREST_INCOME = ("credit_profit_and_loss", "1")  # ближайший аналог "выручки" для банка
+CREDIT_PROFIT_BEFORE_ADJ = ("credit_profit_and_loss", "24")
+CREDIT_NET_PROFIT = ("credit_profit_and_loss", "26")
+
+NOT_AVAILABLE = "Н/Д"
+
+
+def _thousands_to_rubles(value: str) -> str:
+    """
+    Бухгалтерская отчетность в РФ подается "в тысячах рублей" (изредка — "в
+    миллионах" для очень крупных организаций, но эту оговорку сам API никак
+    не помечает — единицы измерения в ответе не отдаются). Сверено на
+    реальных числах: активы банка из примера ИНН 7707083893 = 32 979 678 372
+    в сырых данных — это правдоподобно как ~33 трлн руб. (тыс.), но не как
+    33 млрд (если бы значение уже было в рублях). Домножаем на 1000, считая
+    это доминирующим случаем для целевой аудитории бота (малый/средний
+    бизнес).
+    """
+    try:
+        return str(int(round(float(value) * 1000)))
+    except (TypeError, ValueError):
+        return value
+
 
 class FNSClient:
     """Клиент для API api-fns.ru"""
@@ -172,17 +212,19 @@ class FNSClient:
         year_data = company_block[latest_year]
 
         if any(key.startswith("credit_") for key in year_data.keys()):
-            # Кредитные организации (банки) отчитываются по форме 0409806/807
-            # с другой нумерацией строк — она здесь не размечена, чтобы не
-            # выдавать угаданные подписи за реальные показатели
-            logger.warning(
-                f"ИНН {inn}: отчетность в формате кредитной организации, "
-                f"показатели по стандартным кодам не извлечены"
-            )
-            return {"period": latest_year, "balance": {}, "profit_loss": {}}
+            logger.info(f"ИНН {inn}: отчетность кредитной организации (форма 0409806/807)")
+            balance, profit_loss = self._parse_credit_form(year_data)
+            return {"period": latest_year, "balance": balance, "profit_loss": profit_loss}
+
+        balance, profit_loss = self._parse_standard_form(year_data)
+        return {"period": latest_year, "balance": balance, "profit_loss": profit_loss}
+
+    @staticmethod
+    def _parse_standard_form(year_data: Dict[str, Any]) -> tuple[Dict[str, str], Dict[str, str]]:
+        """Формы №1 и №2 (Приказ Минфина №66н) — обычные компании"""
 
         def get(code: str) -> str:
-            return str(year_data.get(code, "0"))
+            return _thousands_to_rubles(str(year_data.get(code, "0")))
 
         balance = {key: get(code) for key, code in BALANCE_CODES.items()}
         profit_loss = {key: get(code) for key, code in PROFIT_LOSS_CODES.items()}
@@ -194,6 +236,43 @@ class FNSClient:
         )
         # EBITDA не входит в состав официальной отчетности — не подменяем
         # отсутствующий показатель угаданным числом
-        profit_loss["ebitda"] = "Н/Д"
+        profit_loss["ebitda"] = NOT_AVAILABLE
 
-        return {"period": latest_year, "balance": balance, "profit_loss": profit_loss}
+        return balance, profit_loss
+
+    @staticmethod
+    def _parse_credit_form(year_data: Dict[str, Any]) -> tuple[Dict[str, str], Dict[str, str]]:
+        """Формы 0409806/0409807 — кредитные организации (банки)"""
+
+        def get(section_code: tuple[str, str]) -> Optional[str]:
+            section, code = section_code
+            value = (year_data.get(section) or {}).get(code)
+            return _thousands_to_rubles(str(value)) if value is not None else None
+
+        assets = get(CREDIT_ASSETS_TOTAL)
+        equity = get(CREDIT_EQUITY_TOTAL)
+        revenue = get(CREDIT_INTEREST_INCOME)
+        profit = get(CREDIT_PROFIT_BEFORE_ADJ)
+        net_profit = get(CREDIT_NET_PROFIT)
+
+        balance = {
+            "non_current_assets": NOT_AVAILABLE,
+            "current_assets": NOT_AVAILABLE,
+            "assets": assets or NOT_AVAILABLE,
+            "capital": equity or NOT_AVAILABLE,
+            "long_term_liabilities": NOT_AVAILABLE,
+            "short_term_liabilities": NOT_AVAILABLE,
+        }
+        profit_loss = {
+            "revenue": revenue or NOT_AVAILABLE,
+            "cost_of_sales": NOT_AVAILABLE,
+            "gross_profit": NOT_AVAILABLE,
+            "profit_from_sales": NOT_AVAILABLE,
+            "profit": profit or NOT_AVAILABLE,
+            "net_profit": net_profit or NOT_AVAILABLE,
+            "loss": "0",
+            "operating_expenses": NOT_AVAILABLE,
+            "ebitda": NOT_AVAILABLE,
+        }
+
+        return balance, profit_loss
