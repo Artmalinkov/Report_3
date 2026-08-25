@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from app.utils.validators import validate_inn, format_inn
+from app.utils.validators import validate_inn, format_inn, extract_inns
 
 
 def test_inn_validator():
@@ -56,5 +56,27 @@ def test_inn_validator():
     print("=" * 60)
 
 
+def test_extract_inns():
+    """Тест разбора нескольких ИНН из одного сообщения (для сравнения компаний)"""
+
+    cases = [
+        ("7707083893, 7702070139", ["7707083893", "7702070139"]),
+        ("7707083893 7702070139 7736207543", ["7707083893", "7702070139", "7736207543"]),
+        ("7707083893", ["7707083893"]),
+        ("привет 7707083893 как дела", ["7707083893"]),
+        # дубли схлопываются, порядок сохраняется
+        ("7707083893,7702070139,7707083893", ["7707083893", "7702070139"]),
+        ("не инн вообще", []),
+        ("", []),
+        # текст с переносом строки
+        ("7707083893\n7702070139", ["7707083893", "7702070139"]),
+    ]
+
+    for text, expected in cases:
+        result = extract_inns(text)
+        assert result == expected, f"extract_inns({text!r}): ожидалось {expected}, получено {result}"
+
+
 if __name__ == "__main__":
     test_inn_validator()
+    test_extract_inns()
