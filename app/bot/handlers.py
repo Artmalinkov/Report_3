@@ -291,6 +291,19 @@ async def _fetch_financial_data(inn: str) -> Dict[str, Any]:
     return financial_data
 
 
+def _format_period_range(financial_data: Dict[str, Any]) -> str:
+    """
+    Отображаемый период отчета: "с {первый} по {последний} год" при 2+
+    годах в разбивке (см. fns_client.RECENT_YEARS_COUNT), иначе один год
+    (или "Н/Д", если отчетности нет вовсе)
+    """
+    years = financial_data.get("years") or {}
+    if len(years) >= 2:
+        sorted_years = sorted(years.keys())
+        return f"с {sorted_years[0]} по {sorted_years[-1]}"
+    return financial_data.get("period") or "Н/Д"
+
+
 async def check_rate_limit(user_id: int, weight: int = 1) -> Optional[str]:
     """
     Проверяет, можно ли пользователю выполнить запрос к платным API
@@ -448,7 +461,7 @@ async def handle_inn(message: Message, state: FSMContext):
                 f"✅ <b>Отчет готов!</b>\n\n"
                 f"🏢 {financial_data.get('company_name', 'Неизвестно')}\n"
                 f"📋 ИНН: <code>{inn}</code>\n"
-                f"📅 Период: {financial_data.get('period', 'Н/Д')}\n"
+                f"📅 Период: {_format_period_range(financial_data)}\n"
                 f"{risk_emoji} Риск: {analysis.get('risk_level', 'Н/Д')}\n\n"
                 f"💾 Отчет сохранен в истории"
             ),
