@@ -83,6 +83,59 @@ def test_pick_scale_selects_matching_unit():
     assert ReportGenerator._pick_scale([]) == (1, "₽")
 
 
+def test_no_financial_data_shows_not_available_not_zero():
+    """
+    Регресс-тест на реальный баг: у компании без поданной в ФНС
+    бухотчетности balance/profit_loss приходят пустыми ({}). Раньше это
+    молча превращалось в "0" по всему отчету (выглядит как "нулевая
+    выручка"), теперь — честное "Н/Д" и явная отметка has_financial_data.
+    """
+    gen = ReportGenerator()
+    financial_data = {
+        "company_name": "ООО Без отчетности",
+        "ogrn": "1234567890123",
+        "period": "",
+        "balance": {},
+        "profit_loss": {},
+        "status": "Действующее",
+        "legal_address": "",
+    }
+    analysis = {"summary": "", "key_metrics": "", "risks": "", "recommendations": "", "risk_level": "Средний"}
+
+    context = gen._prepare_template_context("0000000000", financial_data, analysis)
+
+    assert context["has_financial_data"] is False
+    assert context["revenue"] == "Н/Д"
+    assert context["profit"] == "Н/Д"
+    assert context["assets"] == "Н/Д"
+    assert context["profitability"] == "Н/Д"
+    assert context["period"] == "Н/Д"
+    # графики не должны рисовать фиктивные нулевые столбики
+    assert context["has_balance_chart"] is False
+    assert context["has_pl_chart"] is False
+
+
+def test_financial_data_present_still_shows_real_numbers():
+    """Обычный случай (данные есть) не должен затрагиваться фиксом выше"""
+    gen = ReportGenerator()
+    financial_data = {
+        "company_name": "ООО С отчетностью",
+        "ogrn": "1234567890123",
+        "period": "2024",
+        "balance": {"assets": "1000000", "capital": "500000"},
+        "profit_loss": {"revenue": "2000000", "profit": "100000"},
+        "status": "Действующее",
+        "legal_address": "",
+    }
+    analysis = {"summary": "", "key_metrics": "", "risks": "", "recommendations": "", "risk_level": "Низкий"}
+
+    context = gen._prepare_template_context("0000000000", financial_data, analysis)
+
+    assert context["has_financial_data"] is True
+    assert context["revenue"] != "Н/Д"
+    assert context["period"] == "2024"
+
+
 if __name__ == "__main__":
     test_render_text_converts_markdown_bold()
     test_render_text_escapes_html_special_chars()
@@ -92,4 +145,6 @@ if __name__ == "__main__":
     test_format_number_passes_through_not_available_label()
     test_chart_point_distinguishes_missing_from_real_zero()
     test_pick_scale_selects_matching_unit()
+    test_no_financial_data_shows_not_available_not_zero()
+    test_financial_data_present_still_shows_real_numbers()
     print("OK")

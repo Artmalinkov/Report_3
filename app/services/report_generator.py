@@ -244,9 +244,18 @@ class ReportGenerator:
         """Подготовка данных для шаблона"""
         balance = financial_data.get("balance", {})
         profit_loss = financial_data.get("profit_loss", {})
+        # У части компаний (особенно новых или сдающих отчетность не по
+        # общей системе) ФНС просто не располагает бухотчетностью вообще —
+        # balance/profit_loss приходят полностью пустыми. Раньше это молча
+        # превращалось в "0" по всему отчету, что выглядит как "у компании
+        # нулевая выручка", а не как "данных нет"
+        has_financial_data = bool(balance) or bool(profit_loss)
+        na_default = "0" if has_financial_data else "Н/Д"
 
         # Безопасное получение значений
-        def get_safe_value(dict_obj, key, default="0"):
+        def get_safe_value(dict_obj, key, default=None):
+            if default is None:
+                default = na_default
             value = dict_obj.get(key, default)
             if value is None:
                 return default
@@ -280,7 +289,7 @@ class ReportGenerator:
         # себестоимость у банка — см. fns_client.py), просто не попадают
         # на график вместо того чтобы рисоваться нулем
         balance_points = [
-            (label, self._chart_point(get_safe_value(balance, key, "0")))
+            (label, self._chart_point(get_safe_value(balance, key)))
             for label, key in [
                 ("Внеоборотные активы", "non_current_assets"),
                 ("Оборотные активы", "current_assets"),
@@ -289,7 +298,7 @@ class ReportGenerator:
         balance_points = [(l, v) for l, v in balance_points if v is not None]
 
         pl_points = [
-            (label, self._chart_point(get_safe_value(profit_loss, key, "0")))
+            (label, self._chart_point(get_safe_value(profit_loss, key)))
             for label, key in [
                 ("Выручка", "revenue"),
                 ("Валовая прибыль", "gross_profit"),
@@ -340,28 +349,30 @@ class ReportGenerator:
             "company_name": self._render_text(financial_data.get("company_name", "Неизвестно")),
             "inn": inn,
             "ogrn": financial_data.get("ogrn", ""),
-            "period": financial_data.get("period", "2024"),
+            "period": financial_data.get("period") or "Н/Д",
             "report_date": datetime.now().strftime("%d.%m.%Y %H:%M"),
             "status": self._render_text(financial_data.get("status", "Активна")),
             "legal_address": self._render_text(financial_data.get("legal_address", "")),
+            "has_financial_data": has_financial_data,
 
-            # Финансовые показатели (форматированные)
-            "revenue": self._format_number(revenue),
-            "profit": self._format_number(profit),
-            "assets": self._format_number(assets),
-            "capital": self._format_number(capital),
-            "profitability": f"{profitability:.1f}%",
-            "autonomy_ratio": f"{autonomy_ratio:.1f}%",
+            # Финансовые показатели (форматированные). Без данных — честное
+            # "Н/Д", а не 0 руб. и 0.0% (см. has_financial_data выше)
+            "revenue": self._format_number(revenue) if has_financial_data else "Н/Д",
+            "profit": self._format_number(profit) if has_financial_data else "Н/Д",
+            "assets": self._format_number(assets) if has_financial_data else "Н/Д",
+            "capital": self._format_number(capital) if has_financial_data else "Н/Д",
+            "profitability": f"{profitability:.1f}%" if has_financial_data else "Н/Д",
+            "autonomy_ratio": f"{autonomy_ratio:.1f}%" if has_financial_data else "Н/Д",
 
             # Детальные данные баланса (безопасное получение)
-            "non_current_assets": self._format_number(get_safe_value(balance, "non_current_assets", "0")),
-            "current_assets": self._format_number(get_safe_value(balance, "current_assets", "0")),
-            "long_term_liabilities": self._format_number(get_safe_value(balance, "long_term_liabilities", "0")),
-            "short_term_liabilities": self._format_number(get_safe_value(balance, "short_term_liabilities", "0")),
-            "gross_profit": self._format_number(get_safe_value(profit_loss, "gross_profit", "0")),
-            "operating_expenses": self._format_number(get_safe_value(profit_loss, "operating_expenses", "0")),
-            "net_profit": self._format_number(get_safe_value(profit_loss, "net_profit", "0")),
-            "ebitda": self._format_number(get_safe_value(profit_loss, "ebitda", "0")),
+            "non_current_assets": self._format_number(get_safe_value(balance, "non_current_assets")),
+            "current_assets": self._format_number(get_safe_value(balance, "current_assets")),
+            "long_term_liabilities": self._format_number(get_safe_value(balance, "long_term_liabilities")),
+            "short_term_liabilities": self._format_number(get_safe_value(balance, "short_term_liabilities")),
+            "gross_profit": self._format_number(get_safe_value(profit_loss, "gross_profit")),
+            "operating_expenses": self._format_number(get_safe_value(profit_loss, "operating_expenses")),
+            "net_profit": self._format_number(get_safe_value(profit_loss, "net_profit")),
+            "ebitda": self._format_number(get_safe_value(profit_loss, "ebitda")),
 
             # Анализ ИИ
             "analysis_summary": self._render_text(analysis.get("summary", "Анализ не выполнен")),

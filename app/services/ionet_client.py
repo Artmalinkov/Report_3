@@ -46,6 +46,21 @@ class IONETClient:
         self.session: Optional[aiohttp.ClientSession] = None
         self.timeout = aiohttp.ClientTimeout(total=60)
 
+    @staticmethod
+    def _get_no_data_analysis(financial_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Честный ответ, когда бухотчетности по компании нет вообще — не выдумываем оценку по нулям"""
+        company_name = financial_data.get("company_name", "Компания")
+        return {
+            "summary": f"По компании {company_name} в ФНС отсутствует бухгалтерская отчетность — "
+                       f"оценить финансовое состояние по имеющимся данным невозможно.",
+            "key_metrics": "Н/Д",
+            "risks": "Невозможно оценить — отсутствуют исходные данные для анализа",
+            "recommendations": "Запросить отчетность у компании напрямую или проверить позже, "
+                                "когда она будет подана в ФНС",
+            "risk_level": "Средний",
+            "full_response": "Анализ не выполнялся: отсутствуют финансовые данные по компании",
+        }
+
     def _get_mock_analysis(self, financial_data: Dict[str, Any]) -> Dict[str, Any]:
         """Возвращает мок-анализ при недоступности API"""
         company_name = financial_data.get("company_name", "Компания")
@@ -129,6 +144,16 @@ class IONETClient:
         """
         Анализ финансовых данных с помощью ИИ
         """
+        # Если по компании вообще нет бухотчетности (balance и profit_loss
+        # пустые — обычная ситуация для новых компаний или ИП), анализировать
+        # нечего: пустые словари выглядели бы для модели как нулевые
+        # показатели, и она честно, но ошибочно решала бы, что это "высокий
+        # риск" — хотя правильный ответ "данных недостаточно". Не тратим на
+        # это платный запрос к API вообще
+        if not financial_data.get("balance") and not financial_data.get("profit_loss"):
+            logger.info("Нет финансовых данных — анализ не выполняется (API не вызывается)")
+            return self._get_no_data_analysis(financial_data)
+
         logger.info("Начало анализа финансовых данных через IO_NET")
 
         try:

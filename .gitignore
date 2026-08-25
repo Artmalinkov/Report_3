@@ -171,6 +171,8 @@ config.yaml
 # My develop files
 for_dev/
 reports/
+# Примеры сгенерированных отчетов, которые иногда кладут в корень для отладки
+*.pdf
 
 # Test results
 *_test_result.json

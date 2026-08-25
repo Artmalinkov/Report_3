@@ -104,6 +104,26 @@ def test_determine_risk_level_fallback_to_content_scan():
     assert level == "Высокий"
 
 
+async def test_analyze_financial_data_skips_api_when_no_data():
+    """
+    Регресс-тест на реальный баг: у компании без бухотчетности (balance и
+    profit_loss пустые) модель раньше получала фиктивные нули и делала
+    вывод вроде "высокий риск" по несуществующим данным. Теперь для
+    пустых данных запрос к API вообще не отправляется — сразу честный
+    ответ "данных недостаточно".
+    """
+    financial_data = {
+        "company_name": "ООО Без отчетности",
+        "balance": {},
+        "profit_loss": {},
+    }
+
+    result = await client.analyze_financial_data(financial_data)
+
+    assert result["risk_level"] == "Средний"
+    assert "отсутствует" in result["summary"]
+
+
 if __name__ == "__main__":
     test_heading_candidate_strips_decorations()
     test_parse_sections_does_not_break_on_word_inside_sentence()
