@@ -22,18 +22,23 @@ from app.database.session import init_db, close_db
 
 async def main():
     """Главная функция запуска бота"""
-    # Настройка логирования
+    # Настройка логирования. LOG_FORMAT=json включает структурированные
+    # логи (по одному JSON-объекту на строку) для агрегаторов вроде
+    # Loki/ELK на проде; text — читаемый цветной вывод для разработки
     logger.remove()
+    is_json = settings.LOG_FORMAT.lower() == "json"
     logger.add(
         sys.stdout,
         format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>",
-        level=settings.LOG_LEVEL if hasattr(settings, 'LOG_LEVEL') else "INFO"
+        level=settings.LOG_LEVEL,
+        serialize=is_json,
     )
     logger.add(
         "logs/report_v_4.log",
         rotation="500 MB",
         retention="10 days",
-        level=settings.LOG_LEVEL if hasattr(settings, 'LOG_LEVEL') else "INFO"
+        level=settings.LOG_LEVEL,
+        serialize=is_json,
     )
 
     logger.info("🚀 Запуск Report_v_4 бота...")

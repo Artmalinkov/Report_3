@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     RATE_LIMIT_COOLDOWN_SECONDS: int = 15
     RATE_LIMIT_DAILY_MAX: int = 20
 
+    # Логирование
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "text"  # "text" — читаемо для разработки, "json" — для прод/агрегаторов логов
+
     class Config:
         env_file = Path(__file__).parent.parent / ".env"
         case_sensitive = True

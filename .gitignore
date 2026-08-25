@@ -178,3 +178,6 @@ reports/
 coverage/
 htmlcov/
 .pytest_cache/
+
+# Дампы БД (scripts/backup_db.py)
+backups/
