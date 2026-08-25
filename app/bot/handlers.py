@@ -291,6 +291,50 @@ async def _fetch_financial_data(inn: str) -> Dict[str, Any]:
     return financial_data
 
 
+async def check_rate_limit(user_id: int, weight: int = 1) -> Optional[str]:
+    """
+    Проверяет, можно ли пользователю выполнить запрос к платным API
+    (ФНС, IO_NET), и если да — сразу его регистрирует (обновляет
+    last_request_at/total_requests и дневной счетчик), чтобы проверка и
+    учет не расходились. Возвращает текст отказа, если запрос нужно
+    отклонить, иначе None.
+
+    weight — во сколько "запросов" засчитывать обращение в дневном лимите:
+    сравнение нескольких компаний тратит API кратно числу компаний, а не
+    как один обычный запрос.
+    """
+    user = await user_crud.get_by_telegram_id(user_id)
+
+    if user and user.is_banned:
+        return "🚫 Доступ ограничен администратором."
+
+    if user and user.last_request_at:
+        elapsed = (datetime.utcnow() - user.last_request_at).total_seconds()
+        if elapsed < settings.RATE_LIMIT_COOLDOWN_SECONDS:
+            wait = int(settings.RATE_LIMIT_COOLDOWN_SECONDS - elapsed) + 1
+            return f"⏳ Слишком много запросов подряд. Подождите {wait} сек. и попробуйте снова."
+
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    cache_key = f"ratelimit:{user_id}:{today}"
+    cached = await cache_crud.get_cache(cache_key)
+    used = int(cached.get("count", 0)) if cached else 0
+
+    if used + weight > settings.RATE_LIMIT_DAILY_MAX:
+        return (
+            f"📛 Достигнут дневной лимит запросов ({settings.RATE_LIMIT_DAILY_MAX} в сутки). "
+            "Попробуйте завтра."
+        )
+
+    await user_crud.increment_requests(user_id)
+    await cache_crud.set_cache(
+        cache_key=cache_key,
+        cache_type="ratelimit",
+        data={"count": used + weight},
+        expires_in_seconds=90000,  # чуть больше суток — ключ сам "сгорает" на следующий день
+    )
+    return None
+
+
 @router.message(StateFilter(default_state), F.text)
 async def handle_inn(message: Message, state: FSMContext):
     """Обработка текстовых сообщений (ИНН или несколько ИНН для сравнения)"""
@@ -322,8 +366,10 @@ async def handle_inn(message: Message, state: FSMContext):
 
     user_id = message.from_user.id
 
-    # Увеличиваем счетчик запросов
-    await user_crud.increment_requests(user_id)
+    rate_limit_error = await check_rate_limit(user_id)
+    if rate_limit_error:
+        await message.answer(rate_limit_error, reply_markup=main_keyboard)
+        return
 
     # Отправляем статус
     status_msg = await message.answer(
@@ -490,7 +536,10 @@ async def run_comparison(message: Message, state: FSMContext, user_id: int, inns
         )
         return
 
-    await user_crud.increment_requests(user_id)
+    rate_limit_error = await check_rate_limit(user_id, weight=len(valid_inns))
+    if rate_limit_error:
+        await message.answer(rate_limit_error, reply_markup=main_keyboard)
+        return
 
     status_msg = await message.answer(
         f"🔍 <i>Получаю данные из ФНС по {len(valid_inns)} компаниям...</i>\n"

@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # App
     DEBUG: bool = False
 
+    # Rate limiting — защита платных API (ФНС, IO_NET) от спама/злоупотреблений
+    RATE_LIMIT_COOLDOWN_SECONDS: int = 15
+    RATE_LIMIT_DAILY_MAX: int = 20
+
     class Config:
         env_file = Path(__file__).parent.parent / ".env"
         case_sensitive = True
