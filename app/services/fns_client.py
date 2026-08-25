@@ -154,6 +154,7 @@ class FNSClient:
             "balance": financial.get("balance", {}),
             "profit_loss": financial.get("profit_loss", {}),
             "status": company_info["status"],
+            "registration_date": company_info["registration_date"],
             "legal_address": company_info["address"],
             "updated_at": datetime.utcnow().isoformat(),
             # {год: {"balance": ..., "profit_loss": ...}} за последние (до)
@@ -182,6 +183,7 @@ class FNSClient:
                 "name": ul.get("НаимПолнЮЛ") or ul.get("НаимСокрЮЛ") or "Неизвестно",
                 "ogrn": ul.get("ОГРН", ""),
                 "status": ul.get("Статус", "Неизвестно"),
+                "registration_date": ul.get("ДатаРег", ""),
                 "address": (ul.get("Адрес") or {}).get("АдресПолн", ""),
             }
 
@@ -191,6 +193,7 @@ class FNSClient:
                 "name": ip.get("ФИОПолн", "Неизвестно"),
                 "ogrn": ip.get("ОГРНИП", ""),
                 "status": ip.get("Статус", "Неизвестно"),
+                "registration_date": ip.get("ДатаРег", ""),
                 "address": (ip.get("Адрес") or {}).get("АдресПолн", ""),
             }
 

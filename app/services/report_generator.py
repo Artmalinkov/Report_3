@@ -351,7 +351,8 @@ class ReportGenerator:
             "ogrn": financial_data.get("ogrn", ""),
             "period": financial_data.get("period") or "Н/Д",
             "report_date": datetime.now().strftime("%d.%m.%Y %H:%M"),
-            "status": self._render_text(financial_data.get("status", "Активна")),
+            "status": self._render_text(self._format_status(financial_data.get("status", ""))),
+            "registration_date": self._format_date(financial_data.get("registration_date", "")),
             "legal_address": self._render_text(financial_data.get("legal_address", "")),
             "has_financial_data": has_financial_data,
 
@@ -520,6 +521,30 @@ class ReportGenerator:
         except Exception:
             return str(value) if value else "0"
 
+    @staticmethod
+    def _format_date(iso_date: str) -> str:
+        """Дата из ФНС (YYYY-MM-DD) в отображаемый вид ДД.ММ.ГГГГ"""
+        if not iso_date:
+            return "Н/Д"
+        try:
+            return datetime.strptime(iso_date, "%Y-%m-%d").strftime("%d.%m.%Y")
+        except ValueError:
+            return iso_date
+
+    @staticmethod
+    def _format_status(raw_status: str) -> str:
+        """
+        Статус из ФНС ("Действующее" и т.п.) в читаемый вид. Отдельного поля
+        с датой ликвидации ФНС не отдает — для неактивных компаний статус
+        ФНС уже содержит формулировку (например "Ликвидировано",
+        "В процессе ликвидации"), поэтому показываем его как есть.
+        """
+        if not raw_status:
+            return "Н/Д"
+        if raw_status.strip().lower() == "действующее":
+            return "Действующая"
+        return raw_status
+
     def _create_default_template(self) -> str:
         """
         Создание базового шаблона, если файл не найден
@@ -638,6 +663,7 @@ class ReportGenerator:
             <h1>📊 Финансовый отчет</h1>
             <div class="meta">
                 <strong>{{ company_name }}</strong> | ИНН: {{ inn }} | ОГРН: {{ ogrn }}<br>
+                Дата регистрации: {{ registration_date }} | Статус: {{ status }}<br>
                 Отчетный период: {{ period }} | Дата: {{ report_date }}
             </div>
             <div class="risk-badge">{{ risk_emoji }} {{ risk_level }} риск</div>

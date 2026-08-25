@@ -7,7 +7,8 @@ MOCK_COMPANIES = {
     "7707083893": {
         "name": "ПАО Сбербанк",
         "ogrn": "1027700132195",
-        "status": "Активна",
+        "status": "Действующее",
+        "registration_date": "1991-06-20",
         "address": "г. Москва, ул. Вавилова, д. 19",
         "period": "2024",
         "balance": {
@@ -32,7 +33,8 @@ MOCK_COMPANIES = {
     "7702070139": {
         "name": "ПАО Газпром",
         "ogrn": "1027700070518",
-        "status": "Активна",
+        "status": "Действующее",
+        "registration_date": "1993-02-25",
         "address": "г. Москва, ул. Наметкина, д. 16",
         "period": "2024",
         "balance": {
@@ -57,7 +59,8 @@ MOCK_COMPANIES = {
     "7736207543": {
         "name": "ООО Тестовая Компания",
         "ogrn": "1037739345678",
-        "status": "Активна",
+        "status": "Ликвидировано",
+        "registration_date": "2003-05-14",
         "address": "г. Москва, ул. Тестовая, д. 1",
         "period": "2024",
         "balance": {
@@ -111,6 +114,7 @@ def get_mock_financial_data(inn: str):
             "balance": company["balance"],
             "profit_loss": company["profit_loss"],
             "status": company["status"],
+            "registration_date": company["registration_date"],
             "legal_address": company["address"],
             "updated_at": "2026-07-26T18:00:00",
             "years": _generate_recent_years(company["period"], company["balance"], company["profit_loss"]),
