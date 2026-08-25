@@ -373,7 +373,7 @@ async def handle_inn(message: Message, state: FSMContext):
 
     # Отправляем статус
     status_msg = await message.answer(
-        "🔍 <i>Получаю данные из ФНС...</i>\n"
+        "🔍 <i>Получаю данные ФНС...</i>\n"
         "⏳ Обычно это занимает 10-30 секунд",
         reply_markup=get_cancel_keyboard()
     )
@@ -542,7 +542,7 @@ async def run_comparison(message: Message, state: FSMContext, user_id: int, inns
         return
 
     status_msg = await message.answer(
-        f"🔍 <i>Получаю данные из ФНС по {len(valid_inns)} компаниям...</i>\n"
+        f"🔍 <i>Получаю данные ФНС по {len(valid_inns)} компаниям...</i>\n"
         "⏳ Это может занять до минуты",
         reply_markup=get_cancel_keyboard()
     )
