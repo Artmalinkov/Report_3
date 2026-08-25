@@ -81,6 +81,24 @@ MOCK_COMPANIES = {
     }
 }
 
+def _generate_recent_years(latest_year: str, balance: dict, profit_loss: dict, yearly_growth: float = 0.10) -> dict:
+    """
+    Синтетическая генерация данных за 2 предыдущих года на основе
+    последнего года и примерного темпа роста — только для мок-режима,
+    чтобы локально тестировать разбивку отчета по годам без реального API
+    """
+    years = {}
+    latest = int(latest_year)
+    for offset in (2, 1, 0):  # от старого к новому
+        year = str(latest - offset)
+        factor = (1 - yearly_growth) ** offset
+        years[year] = {
+            "balance": {k: str(round(int(v) * factor)) for k, v in balance.items()},
+            "profit_loss": {k: str(round(int(v) * factor)) for k, v in profit_loss.items()},
+        }
+    return years
+
+
 def get_mock_financial_data(inn: str):
     """Получение мок-финансовых данных"""
     company = MOCK_COMPANIES.get(inn)
@@ -94,6 +112,7 @@ def get_mock_financial_data(inn: str):
             "profit_loss": company["profit_loss"],
             "status": company["status"],
             "legal_address": company["address"],
-            "updated_at": "2026-07-26T18:00:00"
+            "updated_at": "2026-07-26T18:00:00",
+            "years": _generate_recent_years(company["period"], company["balance"], company["profit_loss"]),
         }
     return None

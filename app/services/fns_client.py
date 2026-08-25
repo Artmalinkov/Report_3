@@ -58,6 +58,10 @@ CREDIT_NET_PROFIT = ("credit_profit_and_loss", "26")
 
 NOT_AVAILABLE = "Н/Д"
 
+# Сколько последних лет отчетности запрашивать для разбивки по годам в
+# отчете (может быть меньше, если у компании нет данных за столько лет)
+RECENT_YEARS_COUNT = 3
+
 
 def _thousands_to_rubles(value: str) -> str:
     """
@@ -152,6 +156,10 @@ class FNSClient:
             "status": company_info["status"],
             "legal_address": company_info["address"],
             "updated_at": datetime.utcnow().isoformat(),
+            # {год: {"balance": ..., "profit_loss": ...}} за последние (до)
+            # 3 года, от старого к новому; для ИП или при недоступности
+            # отчетности — пустой словарь
+            "years": financial.get("years", {}),
         }
 
         logger.info(f"Данные для ИНН {inn} получены: {result['company_name']}")
@@ -215,16 +223,30 @@ class FNSClient:
             logger.info(f"Бухгалтерская отчетность для ИНН {inn} не найдена (например, это ИП)")
             return empty
 
-        latest_year = sorted(company_block.keys())[-1]
-        year_data = company_block[latest_year]
+        available_years = sorted(company_block.keys())
+        recent_years = available_years[-RECENT_YEARS_COUNT:]
+        latest_year = recent_years[-1]
 
-        if any(key.startswith("credit_") for key in year_data.keys()):
+        # Тип формы определяем по последнему году — банк не меняет форму
+        # отчетности от года к году, одного year_data достаточно
+        is_credit = any(key.startswith("credit_") for key in company_block[latest_year].keys())
+        parse = self._parse_credit_form if is_credit else self._parse_standard_form
+        if is_credit:
             logger.info(f"ИНН {inn}: отчетность кредитной организации (форма 0409806/807)")
-            balance, profit_loss = self._parse_credit_form(year_data)
-            return {"period": latest_year, "balance": balance, "profit_loss": profit_loss}
 
-        balance, profit_loss = self._parse_standard_form(year_data)
-        return {"period": latest_year, "balance": balance, "profit_loss": profit_loss}
+        years: Dict[str, Dict[str, Any]] = {}
+        for year in recent_years:
+            balance, profit_loss = parse(company_block[year])
+            years[year] = {"balance": balance, "profit_loss": profit_loss}
+
+        return {
+            "period": latest_year,
+            "balance": years[latest_year]["balance"],
+            "profit_loss": years[latest_year]["profit_loss"],
+            # Данные за последние (до) 3 года, от старого к новому, для
+            # отчета с разбивкой по годам и AI-анализа динамики
+            "years": years,
+        }
 
     @staticmethod
     def _parse_standard_form(year_data: Dict[str, Any]) -> tuple[Dict[str, str], Dict[str, str]]:

@@ -301,6 +301,41 @@ class ReportGenerator:
         balance_scale, balance_unit = self._pick_scale([v for _, v in balance_points])
         pl_scale, pl_unit = self._pick_scale([v for _, v in pl_points])
 
+        # Разбивка по годам (до 3 последних — см. fns_client.RECENT_YEARS_COUNT)
+        # и график динамики выручки/чистой прибыли. Таблицу показываем
+        # только при 2+ годах — с одним годом это дублировало бы блок
+        # "Ключевые показатели" выше
+        years_data = financial_data.get("years", {})
+        sorted_years = sorted(years_data.keys())
+
+        years_table = [
+            {
+                "year": year,
+                "revenue": self._format_number(
+                    get_safe_value(years_data[year].get("profit_loss", {}), "revenue", "0")),
+                "net_profit": self._format_number(
+                    get_safe_value(years_data[year].get("profit_loss", {}), "net_profit", "0")),
+                "assets": self._format_number(
+                    get_safe_value(years_data[year].get("balance", {}), "assets", "0")),
+                "capital": self._format_number(
+                    get_safe_value(years_data[year].get("balance", {}), "capital", "0")),
+            }
+            for year in sorted_years
+        ]
+
+        def zero_if_none(v: Optional[float]) -> float:
+            return v if v is not None else 0.0
+
+        trend_revenue = [
+            self._chart_point(years_data[y].get("profit_loss", {}).get("revenue")) for y in sorted_years
+        ]
+        trend_net_profit = [
+            self._chart_point(years_data[y].get("profit_loss", {}).get("net_profit")) for y in sorted_years
+        ]
+        trend_scale, trend_unit = self._pick_scale(
+            [zero_if_none(v) for v in trend_revenue + trend_net_profit]
+        )
+
         return {
             "company_name": self._render_text(financial_data.get("company_name", "Неизвестно")),
             "inn": inn,
@@ -333,9 +368,26 @@ class ReportGenerator:
             "key_metrics": self._render_text(analysis.get("key_metrics", "")),
             "risks": self._render_text(analysis.get("risks", "")),
             "recommendations": self._render_text(analysis.get("recommendations", "")),
+            "dynamics": self._render_text(analysis.get("dynamics", "")),
             "risk_level": risk_level,
             "risk_color": risk_color,
             "risk_emoji": risk_emoji,
+
+            # Разбивка по годам
+            "years_table": years_table,
+            "has_years_table": len(years_table) >= 2,
+            "has_trend_chart": len(sorted_years) >= 2 and (
+                any(v is not None for v in trend_revenue) or any(v is not None for v in trend_net_profit)
+            ),
+            "trend_chart_json": json.dumps({
+                "labels": sorted_years,
+                "datasets": [
+                    {"label": "Выручка", "data": [round(zero_if_none(v) / trend_scale, 2) for v in trend_revenue]},
+                    {"label": "Чистая прибыль",
+                     "data": [round(zero_if_none(v) / trend_scale, 2) for v in trend_net_profit]},
+                ],
+                "unit": trend_unit,
+            }, ensure_ascii=False),
 
             # Дополнительные метаданные
             "full_response": analysis.get("full_response", ""),

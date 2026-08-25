@@ -21,6 +21,7 @@ SINGLE_ANALYSIS_LABELS = {
     "ФИНАНСОВОЕ": "ФИНАНСОВОЕ СОСТОЯНИЕ",
     "КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ": "КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ",
     "ПОКАЗАТЕЛИ": "КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ",
+    "ДИНАМИКА": "ДИНАМИКА",
     "РИСКИ": "РИСКИ",
     "РЕКОМЕНДАЦИИ": "РЕКОМЕНДАЦИИ",
     "УРОВЕНЬ РИСКА": "УРОВЕНЬ РИСКА",
@@ -67,9 +68,24 @@ class IONETClient:
             risk_level = "Высокий"
             summary = f"Компания {company_name} показывает низкую рентабельность ({profitability:.1f}%) и недостаточную финансовую устойчивость (автономия {autonomy:.1f}%). Рекомендуется детальный анализ."
 
+        years = financial_data.get("years", {})
+        sorted_years = sorted(years.keys())
+        dynamics = ""
+        if len(sorted_years) >= 2:
+            first_revenue = self._safe_float(years[sorted_years[0]].get("profit_loss", {}).get("revenue", "0"))
+            last_revenue = self._safe_float(years[sorted_years[-1]].get("profit_loss", {}).get("revenue", "0"))
+            if first_revenue > 0:
+                change = (last_revenue - first_revenue) / first_revenue * 100
+                trend = "рост" if change > 0 else "снижение" if change < 0 else "без изменений"
+                dynamics = (
+                    f"Выручка за период {sorted_years[0]}-{sorted_years[-1]}: {trend} "
+                    f"({change:+.1f}%). Детальный анализ динамики недоступен в оффлайн-режиме."
+                )
+
         return {
             "summary": summary,
             "key_metrics": f"Рентабельность: {profitability:.1f}% | Автономия: {autonomy:.1f}% | Выручка: {revenue:,.0f} руб.",
+            "dynamics": dynamics,
             "risks": "Низкая диверсификация источников дохода. Зависимость от экономической ситуации.",
             "recommendations": "1. Увеличить долю собственного капитала\n2. Диверсифицировать источники дохода\n3. Повысить эффективность управления активами",
             "risk_level": risk_level,
@@ -176,7 +192,10 @@ class IONETClient:
 
     def _build_analysis_prompt(self, financial_data: Dict[str, Any]) -> str:
         """
-        Построение промпта для анализа финансовых данных
+        Построение промпта для анализа финансовых данных. Если доступны
+        данные за 2+ года (financial_data["years"] — см. fns_client.py),
+        промпт просит проанализировать динамику, но дать итоговую оценку
+        на текущий момент, а не изолированно по последнему году.
         """
         company_name = financial_data.get("company_name", "Неизвестная компания")
         inn = financial_data.get("inn", "")
@@ -184,11 +203,12 @@ class IONETClient:
 
         balance = financial_data.get("balance", {})
         profit_loss = financial_data.get("profit_loss", {})
+        years = financial_data.get("years", {})
+        sorted_years = sorted(years.keys())
 
-        prompt = f"""
-Проведи финансовый анализ компании {company_name} (ИНН: {inn}) за {period} год.
+        current_year_block = f"""Подробные данные за последний отчетный год ({period}):
 
-Данные бухгалтерского баланса:
+Бухгалтерский баланс:
 - Активы: {balance.get('assets', '0')} руб.
 - Внеоборотные активы: {balance.get('non_current_assets', '0')} руб.
 - Оборотные активы: {balance.get('current_assets', '0')} руб.
@@ -196,12 +216,52 @@ class IONETClient:
 - Долгосрочные обязательства: {balance.get('long_term_liabilities', '0')} руб.
 - Краткосрочные обязательства: {balance.get('short_term_liabilities', '0')} руб.
 
-Данные отчета о финансовых результатах:
+Отчет о финансовых результатах:
 - Выручка: {profit_loss.get('revenue', '0')} руб.
 - Валовая прибыль: {profit_loss.get('gross_profit', '0')} руб.
 - Прибыль до налогообложения: {profit_loss.get('profit', '0')} руб.
 - Чистая прибыль: {profit_loss.get('net_profit', '0')} руб.
-- EBITDA: {profit_loss.get('ebitda', '0')} руб.
+- EBITDA: {profit_loss.get('ebitda', '0')} руб."""
+
+        if len(sorted_years) >= 2:
+            year_blocks = []
+            for year in sorted_years:
+                yb = years[year].get("balance", {})
+                ypl = years[year].get("profit_loss", {})
+                year_blocks.append(
+                    f"### {year} год\n"
+                    f"- Активы: {yb.get('assets', '0')} руб.\n"
+                    f"- Собственный капитал: {yb.get('capital', '0')} руб.\n"
+                    f"- Выручка: {ypl.get('revenue', '0')} руб.\n"
+                    f"- Чистая прибыль: {ypl.get('net_profit', '0')} руб."
+                )
+            years_block = "\n\n".join(year_blocks)
+
+            prompt = f"""
+Проведи финансовый анализ компании {company_name} (ИНН: {inn}) на основе отчетности за {len(sorted_years)} года ({sorted_years[0]}-{sorted_years[-1]}):
+
+{years_block}
+
+{current_year_block}
+
+Пожалуйста, предоставь анализ в следующем формате:
+
+1. ФИНАНСОВОЕ СОСТОЯНИЕ (краткая оценка на текущий момент, с учетом истории)
+2. КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ (рентабельность, ликвидность, финансовая устойчивость на последний год)
+3. ДИНАМИКА (как менялись показатели за {sorted_years[0]}-{sorted_years[-1]} годы — рост, спад или стабильность, с конкретными цифрами)
+4. РИСКИ (выявленные риски и проблемы, включая риски, видимые из динамики)
+5. РЕКОМЕНДАЦИИ (практические рекомендации)
+6. УРОВЕНЬ РИСКА (Низкий/Средний/Высокий)
+
+Пункты 1, 2 и 6 должны отражать текущее состояние компании, но с учетом тренда за все {len(sorted_years)} года — не только последний год в отрыве от истории.
+
+Будь объективен, используй профессиональную терминологию, но объясняй доступно.
+"""
+        else:
+            prompt = f"""
+Проведи финансовый анализ компании {company_name} (ИНН: {inn}) за {period} год.
+
+{current_year_block}
 
 Пожалуйста, предоставь анализ в следующем формате:
 
@@ -233,6 +293,7 @@ class IONETClient:
             return {
                 "summary": sections.get("ФИНАНСОВОЕ СОСТОЯНИЕ", "Анализ не выполнен"),
                 "key_metrics": sections.get("КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ", ""),
+                "dynamics": sections.get("ДИНАМИКА", ""),
                 "risks": sections.get("РИСКИ", ""),
                 "recommendations": sections.get("РЕКОМЕНДАЦИИ", ""),
                 "risk_level": risk_level,
@@ -244,6 +305,7 @@ class IONETClient:
             return {
                 "summary": "Ошибка при анализе данных",
                 "key_metrics": "",
+                "dynamics": "",
                 "risks": "",
                 "recommendations": "",
                 "risk_level": "Средний",

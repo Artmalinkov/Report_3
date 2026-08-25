@@ -128,6 +128,35 @@
         .chart-box canvas {
             max-height: 260px;
         }
+        .table-scroll {
+            overflow-x: auto;
+        }
+        table.compare {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 400px;
+        }
+        table.compare th, table.compare td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid #ecf0f1;
+        }
+        table.compare th {
+            background: #f8f9fa;
+            color: #2c3e50;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        table.compare td.metric-label {
+            color: #7f8c8d;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        table.compare td.value {
+            font-weight: bold;
+            color: #2c3e50;
+        }
         .footer {
             margin-top: 30px;
             padding-top: 20px;
@@ -227,10 +256,46 @@
             </div>
         </div>
 
-        {% if has_balance_chart or has_pl_chart %}
+        {% if has_years_table %}
+        <div class="section">
+            <h2>📅 Динамика по годам</h2>
+            <div class="table-scroll">
+                <table class="compare">
+                    <tr>
+                        <th>Показатель</th>
+                        {% for y in years_table %}<th>{{ y.year }}</th>{% endfor %}
+                    </tr>
+                    <tr>
+                        <td class="metric-label">Выручка</td>
+                        {% for y in years_table %}<td class="value">{{ y.revenue }}</td>{% endfor %}
+                    </tr>
+                    <tr>
+                        <td class="metric-label">Чистая прибыль</td>
+                        {% for y in years_table %}<td class="value">{{ y.net_profit }}</td>{% endfor %}
+                    </tr>
+                    <tr>
+                        <td class="metric-label">Активы</td>
+                        {% for y in years_table %}<td class="value">{{ y.assets }}</td>{% endfor %}
+                    </tr>
+                    <tr>
+                        <td class="metric-label">Собственный капитал</td>
+                        {% for y in years_table %}<td class="value">{{ y.capital }}</td>{% endfor %}
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if has_balance_chart or has_pl_chart or has_trend_chart %}
         <div class="section">
             <h2>📈 Графики</h2>
             <div class="chart-grid">
+                {% if has_trend_chart %}
+                <div class="chart-box">
+                    <h3>Динамика по годам</h3>
+                    <canvas id="trendChart"></canvas>
+                </div>
+                {% endif %}
                 {% if has_balance_chart %}
                 <div class="chart-box">
                     <h3>Структура активов</h3>
@@ -256,6 +321,11 @@
                 <h3>Ключевые показатели</h3>
                 <p>{{ key_metrics or 'Нет данных' }}</p>
 
+                {% if dynamics %}
+                <h3>Динамика за последние годы</h3>
+                <p>{{ dynamics }}</p>
+                {% endif %}
+
                 <h3>Выявленные риски</h3>
                 <p>{{ risks or 'Не выявлены' }}</p>
 
@@ -272,6 +342,29 @@
 
     <script>{{ chartjs_lib }}</script>
     <script>
+        {% if has_trend_chart %}
+        (function () {
+            const d = {{ trend_chart_json }};
+            new Chart(document.getElementById('trendChart'), {
+                type: 'line',
+                data: {
+                    labels: d.labels,
+                    datasets: d.datasets.map((ds, i) => ({
+                        label: ds.label + ', ' + d.unit,
+                        data: ds.data,
+                        borderColor: ['#4CAF50', '#2196F3'][i % 2],
+                        backgroundColor: ['#4CAF50', '#2196F3'][i % 2],
+                        tension: 0.2
+                    }))
+                },
+                options: {
+                    animation: false,
+                    plugins: { legend: { position: 'bottom' } },
+                    scales: { y: { title: { display: true, text: d.unit } } }
+                }
+            });
+        })();
+        {% endif %}
         {% if has_balance_chart %}
         (function () {
             const d = {{ balance_chart_json }};
