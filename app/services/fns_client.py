@@ -203,6 +203,13 @@ class FNSClient:
             logger.warning(f"Бухгалтерская отчетность для {inn} недоступна: {e}")
             return empty
 
+        # При отсутствии отчетности (обычная ситуация для ИП) api-fns.ru
+        # отдает не {} (пустой объект по ИНН), а буквально [] (пустой
+        # список) — проверено на реальном ИП без бухотчетности
+        if not isinstance(data, dict):
+            logger.info(f"Бухгалтерская отчетность для ИНН {inn} не найдена (например, это ИП)")
+            return empty
+
         company_block = data.get(inn)
         if not company_block:
             logger.info(f"Бухгалтерская отчетность для ИНН {inn} не найдена (например, это ИП)")

@@ -8,6 +8,7 @@
 
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -105,6 +106,20 @@ def test_credit_schema_detection():
 
     assert any(key.startswith("credit_") for key in bank_year.keys()) is True
     assert any(key.startswith("credit_") for key in standard_year.keys()) is False
+
+
+async def test_get_financial_data_handles_empty_list_response():
+    """
+    Регресс-тест на реальный баг, найденный на живом ИП без бухотчетности:
+    api-fns.ru при отсутствии данных отдает не {} (пустой объект по ИНН),
+    а буквально [] (пустой список) — код падал с AttributeError на
+    data.get(inn), считая ответ всегда словарем.
+    """
+    client = FNSClient()
+    with patch.object(client, "_call", new=AsyncMock(return_value=[])):
+        result = await client._get_financial_data("732190597507")
+
+    assert result == {"period": "", "balance": {}, "profit_loss": {}}
 
 
 if __name__ == "__main__":
