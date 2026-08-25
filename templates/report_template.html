@@ -39,6 +39,24 @@
             font-size: 14px;
             margin-top: 8px;
         }
+        .header .company-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-top: 10px;
+        }
+        .header .company-short-name {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-top: 2px;
+        }
+        .header .meta-details {
+            text-align: left;
+            color: #7f8c8d;
+            font-size: 14px;
+            line-height: 1.7;
+            margin-top: 14px;
+        }
         .risk-badge {
             display: inline-block;
             padding: 6px 16px;
@@ -157,16 +175,8 @@
             font-weight: bold;
             color: #2c3e50;
         }
-        .footer {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #ecf0f1;
-            text-align: center;
-            font-size: 12px;
-            color: #95a5a6;
-        }
         .disclaimer {
-            margin-top: 15px;
+            margin-top: 30px;
             padding: 12px 15px;
             background: #f8f9fa;
             border-radius: 6px;
@@ -185,16 +195,25 @@
     <div class="container">
         <div class="header">
             <h1>📊 Финансовый отчет</h1>
+            <div class="company-name">{{ company_name }}</div>
+            {% if short_name %}<div class="company-short-name">({{ short_name }})</div>{% endif %}
             <div class="meta">
-                <strong>{{ company_name }}</strong> | ИНН: {{ inn }} | ОГРН: {{ ogrn }}<br>
-                Дата регистрации: {{ registration_date }} | Статус: {{ status }}<br>
-                Отчетный период: {{ period }} | Дата: {{ report_date }}
+                ИНН: {{ inn }} | ОГРН: {{ ogrn }}
             </div>
             {% if has_financial_data %}
             <div class="risk-badge">{{ risk_emoji }} {{ risk_level }} риск</div>
             {% else %}
             <div class="risk-badge" style="background-color: #7f8c8d;">⚪ Нет данных для оценки</div>
             {% endif %}
+            <div class="meta-details">
+                Дата регистрации: {{ registration_date }}<br>
+                Статус: {{ status }}<br>
+                {% if termination_date %}Дата ликвидации: {{ termination_date }}<br>{% endif %}
+                Уставной капитал: {{ charter_capital }}<br>
+                Численность персонала: {{ staff_count }}<br>
+                Отчетный период: {{ period }}<br>
+                Дата формирования отчета: {{ report_date }}
+            </div>
         </div>
 
         {% if not has_financial_data %}
@@ -353,11 +372,6 @@
                 <h3>Рекомендации</h3>
                 <p>{{ recommendations or 'Провести дополнительный анализ' }}</p>
             </div>
-        </div>
-
-        <div class="footer">
-            Отчет создан автоматически с использованием ИИ Report_v_4<br>
-            {{ report_date }}
         </div>
 
         <div class="disclaimer">

@@ -347,12 +347,19 @@ class ReportGenerator:
 
         return {
             "company_name": self._render_text(financial_data.get("company_name", "Неизвестно")),
+            "short_name": self._render_text(financial_data.get("short_name", "")),
             "inn": inn,
             "ogrn": financial_data.get("ogrn", ""),
-            "period": financial_data.get("period") or "Н/Д",
+            "period": self.format_period_range(financial_data),
             "report_date": datetime.now().strftime("%d.%m.%Y %H:%M"),
             "status": self._render_text(self._format_status(financial_data.get("status", ""))),
             "registration_date": self._format_date(financial_data.get("registration_date", "")),
+            "termination_date": self._format_date(financial_data.get("termination_date", "")) if financial_data.get("termination_date") else "",
+            "charter_capital": (
+                self._format_number(financial_data.get("charter_capital")) + " ₽"
+                if financial_data.get("charter_capital") else "Н/Д"
+            ),
+            "staff_count": financial_data.get("staff_count") or "Н/Д",
             "legal_address": self._render_text(financial_data.get("legal_address", "")),
             "has_financial_data": has_financial_data,
 
@@ -532,6 +539,19 @@ class ReportGenerator:
             return iso_date
 
     @staticmethod
+    def format_period_range(financial_data: Dict[str, Any]) -> str:
+        """
+        Отображаемый период отчета: "с {первый} по {последний} год" при 2+
+        годах в разбивке (см. fns_client.RECENT_YEARS_COUNT), иначе один год
+        (или "Н/Д", если отчетности нет вовсе)
+        """
+        years = financial_data.get("years") or {}
+        if len(years) >= 2:
+            sorted_years = sorted(years.keys())
+            return f"с {sorted_years[0]} по {sorted_years[-1]}"
+        return financial_data.get("period") or "Н/Д"
+
+    @staticmethod
     def _format_status(raw_status: str) -> str:
         """
         Статус из ФНС ("Действующее" и т.п.) в читаемый вид. Отдельного поля
@@ -661,12 +681,19 @@ class ReportGenerator:
     <div class="container">
         <div class="header">
             <h1>📊 Финансовый отчет</h1>
-            <div class="meta">
-                <strong>{{ company_name }}</strong> | ИНН: {{ inn }} | ОГРН: {{ ogrn }}<br>
-                Дата регистрации: {{ registration_date }} | Статус: {{ status }}<br>
-                Отчетный период: {{ period }} | Дата: {{ report_date }}
-            </div>
+            <div style="font-size: 20px; font-weight: bold; color: #2c3e50; margin-top: 10px;">{{ company_name }}</div>
+            {% if short_name %}<div style="font-size: 14px; color: #7f8c8d;">({{ short_name }})</div>{% endif %}
+            <div class="meta">ИНН: {{ inn }} | ОГРН: {{ ogrn }}</div>
             <div class="risk-badge">{{ risk_emoji }} {{ risk_level }} риск</div>
+            <div style="text-align: left; color: #7f8c8d; font-size: 14px; line-height: 1.7; margin-top: 14px;">
+                Дата регистрации: {{ registration_date }}<br>
+                Статус: {{ status }}<br>
+                {% if termination_date %}Дата ликвидации: {{ termination_date }}<br>{% endif %}
+                Уставной капитал: {{ charter_capital }}<br>
+                Численность персонала: {{ staff_count }}<br>
+                Отчетный период: {{ period }}<br>
+                Дата формирования отчета: {{ report_date }}
+            </div>
         </div>
 
         <div class="section">
@@ -760,10 +787,6 @@ class ReportGenerator:
             </div>
         </div>
 
-        <div class="footer">
-            Отчет создан автоматически с использованием ИИ Report_v_4<br>
-            {{ report_date }}
-        </div>
     </div>
 </body>
 </html>

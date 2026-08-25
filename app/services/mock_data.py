@@ -5,10 +5,13 @@
 
 MOCK_COMPANIES = {
     "7707083893": {
-        "name": "ПАО Сбербанк",
+        "name": "ПУБЛИЧНОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО \"СБЕРБАНК РОССИИ\"",
+        "short_name": "ПАО СБЕРБАНК",
         "ogrn": "1027700132195",
         "status": "Действующее",
         "registration_date": "1991-06-20",
+        "charter_capital": "67760844000",
+        "staff_count": "",
         "address": "г. Москва, ул. Вавилова, д. 19",
         "period": "2024",
         "balance": {
@@ -32,9 +35,12 @@ MOCK_COMPANIES = {
     },
     "7702070139": {
         "name": "ПАО Газпром",
+        "short_name": "",
         "ogrn": "1027700070518",
         "status": "Действующее",
         "registration_date": "1993-02-25",
+        "charter_capital": "",
+        "staff_count": "",
         "address": "г. Москва, ул. Наметкина, д. 16",
         "period": "2024",
         "balance": {
@@ -57,10 +63,14 @@ MOCK_COMPANIES = {
         }
     },
     "7736207543": {
-        "name": "ООО Тестовая Компания",
+        "name": "ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ \"ТЕСТОВАЯ КОМПАНИЯ\"",
+        "short_name": "ООО ТЕСТОВАЯ КОМПАНИЯ",
         "ogrn": "1037739345678",
         "status": "Ликвидировано",
         "registration_date": "2003-05-14",
+        "termination_date": "2025-11-03",
+        "charter_capital": "1000000",
+        "staff_count": "42",
         "address": "г. Москва, ул. Тестовая, д. 1",
         "period": "2024",
         "balance": {
@@ -81,6 +91,25 @@ MOCK_COMPANIES = {
             "net_profit": "400000000",
             "ebitda": "800000000",
         }
+    },
+    # Реальная компания (проверена live-запросом к api-fns.ru 26.08.2026),
+    # исключена из ЕГРЮЛ как недействующее юрлицо (ст. 21.1 129-ФЗ) — для
+    # таких компаний бухотчетность в ФНС обычно отсутствует, поэтому здесь
+    # намеренно пустые balance/profit_loss (без разбивки по годам) — заодно
+    # проверяет отображение "Н/Д" одновременно с датой ликвидации
+    "9110032185": {
+        "name": "ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ \"УПРАВЛЯЮЩАЯ КОМПАНИЯ КОМФОРТ-СЕРВИС\"",
+        "short_name": "ООО \"УК КОМФОРТ-СЕРВИС\"",
+        "ogrn": "1239100007244",
+        "status": "Ликвидировано по 129-ФЗ",
+        "registration_date": "2023-06-07",
+        "termination_date": "2025-03-14",
+        "charter_capital": "10000",
+        "staff_count": "",
+        "address": "",
+        "period": "",
+        "balance": {},
+        "profit_loss": {},
     }
 }
 
@@ -109,14 +138,21 @@ def get_mock_financial_data(inn: str):
         return {
             "inn": inn,
             "company_name": company["name"],
+            "short_name": company.get("short_name", ""),
             "ogrn": company["ogrn"],
             "period": company["period"],
             "balance": company["balance"],
             "profit_loss": company["profit_loss"],
             "status": company["status"],
             "registration_date": company["registration_date"],
+            "termination_date": company.get("termination_date", ""),
+            "charter_capital": company.get("charter_capital", ""),
+            "staff_count": company.get("staff_count", ""),
             "legal_address": company["address"],
             "updated_at": "2026-07-26T18:00:00",
-            "years": _generate_recent_years(company["period"], company["balance"], company["profit_loss"]),
+            "years": (
+                _generate_recent_years(company["period"], company["balance"], company["profit_loss"])
+                if company["period"] else {}
+            ),
         }
     return None

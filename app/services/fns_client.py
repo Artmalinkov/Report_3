@@ -149,12 +149,16 @@ class FNSClient:
         result = {
             "inn": inn,
             "company_name": company_info["name"],
+            "short_name": company_info["short_name"],
             "ogrn": company_info["ogrn"],
             "period": financial.get("period", ""),
             "balance": financial.get("balance", {}),
             "profit_loss": financial.get("profit_loss", {}),
             "status": company_info["status"],
             "registration_date": company_info["registration_date"],
+            "termination_date": company_info["termination_date"],
+            "charter_capital": company_info["charter_capital"],
+            "staff_count": company_info["staff_count"],
             "legal_address": company_info["address"],
             "updated_at": datetime.utcnow().isoformat(),
             # {год: {"balance": ..., "profit_loss": ...}} за последние (до)
@@ -179,11 +183,34 @@ class FNSClient:
 
         if "ЮЛ" in entry:
             ul = entry["ЮЛ"]
+            full_name = ul.get("НаимПолнЮЛ") or ""
+            short_name = ul.get("НаимСокрЮЛ") or ""
+            name = full_name or short_name or "Неизвестно"
             return {
-                "name": ul.get("НаимПолнЮЛ") or ul.get("НаимСокрЮЛ") or "Неизвестно",
+                "name": name,
+                # показываем сокращенное наименование отдельной строкой,
+                # только если оно реально отличается от того, что уже
+                # показано как основное имя компании
+                "short_name": short_name if short_name and short_name != name else "",
                 "ogrn": ul.get("ОГРН", ""),
                 "status": ul.get("Статус", "Неизвестно"),
                 "registration_date": ul.get("ДатаРег", ""),
+                # Проверено на реальной ликвидированной компании (ИНН
+                # 9110032185): ДатаПрекр = дата исключения из ЕГРЮЛ,
+                # совпадает с СтатусДата
+                "termination_date": ul.get("ДатаПрекр", ""),
+                # Капитал.СумКап подтвержден на реальных данных (Сбербанк:
+                # 67 760 844 000 руб. — сходится с известным реальным
+                # уставным капиталом), значение уже в рублях (не в тысячах,
+                # в отличие от бухотчетности методом bo)
+                "charter_capital": (ul.get("Капитал") or {}).get("СумКап", ""),
+                # НЕ ПОДТВЕРЖДЕНО на реальных данных: по документации
+                # api-fns.ru поле должно быть ОткрСведения.КолРаб, но ни в
+                # одном из проверенных живых ответов (Сбербанк, ликвидированная
+                # компания, ИП) оно не встретилось заполненным — либо не все
+                # компании его раскрывают, либо название неточное. .get() —
+                # если поля нет, строка просто не покажется в отчете
+                "staff_count": (ul.get("ОткрСведения") or {}).get("КолРаб", ""),
                 "address": (ul.get("Адрес") or {}).get("АдресПолн", ""),
             }
 
@@ -191,9 +218,14 @@ class FNSClient:
             ip = entry["ИП"]
             return {
                 "name": ip.get("ФИОПолн", "Неизвестно"),
+                "short_name": "",
+                # У ИП нет уставного капитала как правовой категории
+                "charter_capital": "",
+                "staff_count": (ip.get("ОткрСведения") or {}).get("КолРаб", ""),
                 "ogrn": ip.get("ОГРНИП", ""),
                 "status": ip.get("Статус", "Неизвестно"),
                 "registration_date": ip.get("ДатаРег", ""),
+                "termination_date": ip.get("ДатаПрекр", ""),  # см. пояснение выше для ЮЛ
                 "address": (ip.get("Адрес") or {}).get("АдресПолн", ""),
             }
 
