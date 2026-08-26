@@ -232,7 +232,7 @@ async def btn_about(message: Message, state: FSMContext):
     await state.clear()
 
     await message.answer(
-        "ℹ️ <b>О боте Report_v_4</b>\n\n"
+        "ℹ️ <b>О боте Deep Finance Report</b>\n\n"
         "🤖 <b>Версия:</b> 4.0.0\n"
         "📅 <b>Разработан:</b> 2026\n\n"
         "📊 <b>Функции:</b>\n"
