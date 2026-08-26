@@ -79,7 +79,7 @@ async def cmd_start(message: Message, state: FSMContext):
     mode_text = "🔧 <b>Режим:</b> РАЗРАБОТКА (мок-данные)\n" if settings.DEBUG else ""
 
     await message.answer(
-        f"🏢 <b>Добро пожаловать в Report_v_4!</b>\n\n"
+        f"🏢 <b>Добро пожаловать в Deep Finance Report!</b>\n\n"
         f"{mode_text}"
         "Я помогу вам проанализировать финансовую отчетность компании по ИНН.\n\n"
         "📌 <b>Как использовать:</b>\n"
