@@ -28,6 +28,27 @@ main_keyboard = ReplyKeyboardMarkup(
 )
 
 
+def get_main_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
+    """Основная клавиатура; администратору добавляется кнопка "Дашборд" """
+    keyboard = [
+        [
+            KeyboardButton(text="📊 Моя статистика"),
+            KeyboardButton(text="📚 История")
+        ],
+        [
+            KeyboardButton(text="❓ Помощь"),
+            KeyboardButton(text="ℹ️ О боте")
+        ]
+    ]
+    if is_admin:
+        keyboard.append([KeyboardButton(text="🖥 Дашборд")])
+    return ReplyKeyboardMarkup(
+        keyboard=keyboard,
+        resize_keyboard=True,
+        one_time_keyboard=False
+    )
+
+
 def get_report_actions_keyboard(report_id: int) -> InlineKeyboardMarkup:
     """Инлайн-клавиатура для действий с отчетом"""
     builder = InlineKeyboardBuilder()

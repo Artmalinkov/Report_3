@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "text"  # "text" — читаемо для разработки, "json" — для прод/агрегаторов логов
 
+    # Дашборд (внутренняя админ-панель, без публичного доступа — см. ROADMAP)
+    DASHBOARD_SECRET_KEY: str = "change-me-in-env"  # для подписи сессионной cookie
+    DASHBOARD_PORT: int = 8080
+    # Адрес, который бот подставляет в magic-link — с точки зрения браузера
+    # админа (для прод-сервера открывается через SSH-туннель на этот же порт)
+    DASHBOARD_BASE_URL: str = "http://localhost:8080"
+
     class Config:
         env_file = Path(__file__).parent.parent / ".env"
         case_sensitive = True
