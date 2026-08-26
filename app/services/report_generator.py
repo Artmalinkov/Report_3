@@ -185,8 +185,11 @@ class ReportGenerator:
 
         # Данные для графиков Chart.js: те же ряды, что и в таблице выше,
         # но сырыми числами (None для недоступных показателей — не рисуем
-        # их нулем, чтобы не выдавать "нет данных" за реальный ноль)
-        names = [row["company_name"] for row in rows]
+        # их нулем, чтобы не выдавать "нет данных" за реальный ноль).
+        # Подписи по оси X — короткие (см. _chart_label): полное юрлицо
+        # ("ПУБЛИЧНОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО...") не помещается под графиком
+        # и ломает верстку, в отличие от таблицы выше, где оно уместно
+        names = [self._render_text(self._chart_label(c)) for c in companies]
         revenue_points = [self._chart_point(c.get("profit_loss", {}).get("revenue")) for c in companies]
         net_profit_points = [self._chart_point(c.get("profit_loss", {}).get("net_profit")) for c in companies]
         assets_points = [self._chart_point(c.get("balance", {}).get("assets")) for c in companies]
@@ -444,6 +447,19 @@ class ReportGenerator:
                     .replace(">", "&gt;"))
         text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
         return text
+
+    @staticmethod
+    def _chart_label(company: Dict[str, Any], max_len: int = 25) -> str:
+        """
+        Короткая подпись компании для оси X графика сравнения: сокращенное
+        наименование, если оно есть, иначе полное — обрезанное до разумной
+        длины (иначе длинные подписи разворачиваются и вылезают за пределы
+        блока графика)
+        """
+        name = company.get("short_name") or company.get("company_name") or "Неизвестно"
+        if len(name) > max_len:
+            name = name[:max_len - 1].rstrip() + "…"
+        return name
 
     @staticmethod
     def _chart_point(raw) -> Optional[float]:
