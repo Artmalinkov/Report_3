@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.types import BotCommand
 from loguru import logger
 
 from app.config import settings
@@ -58,6 +59,16 @@ async def main():
         # Создание диспетчера
         dp = Dispatcher()
         dp.include_router(router)
+
+        # Кнопка "Меню" рядом с полем ввода — список команд по умолчанию
+        # (без /dashboard: он не для всех, добавляется отдельно только в
+        # чат с администратором — см. cmd_start)
+        await bot.set_my_commands([
+            BotCommand(command="start", description="Начать общение"),
+            BotCommand(command="help", description="Справка"),
+            BotCommand(command="history", description="История запросов"),
+            BotCommand(command="stats", description="Моя статистика"),
+        ])
 
         # Информация о боте
         bot_info = await bot.get_me()

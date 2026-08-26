@@ -16,7 +16,9 @@ from aiogram.types import (
     BufferedInputFile,
     FSInputFile,
     InlineKeyboardMarkup,
-    ReplyKeyboardRemove
+    ReplyKeyboardRemove,
+    BotCommand,
+    BotCommandScopeChat
 )
 from aiogram.exceptions import TelegramBadRequest
 from loguru import logger
@@ -77,6 +79,21 @@ async def cmd_start(message: Message, state: FSMContext):
     )
 
     logger.info(f"Пользователь {user.telegram_id} запустил бота")
+
+    if user.is_admin:
+        # Персональное меню (кнопка "Меню" у поля ввода) для этого чата —
+        # добавляет /dashboard поверх обычного набора команд, не влияя на
+        # меню остальных пользователей (у них — глобальный список из main.py)
+        await message.bot.set_my_commands(
+            [
+                BotCommand(command="start", description="Начать общение"),
+                BotCommand(command="help", description="Справка"),
+                BotCommand(command="history", description="История запросов"),
+                BotCommand(command="stats", description="Моя статистика"),
+                BotCommand(command="dashboard", description="Админ-панель"),
+            ],
+            scope=BotCommandScopeChat(chat_id=message.chat.id)
+        )
 
     mode_text = "🔧 <b>Режим:</b> РАЗРАБОТКА (мок-данные)\n" if settings.DEBUG else ""
 
@@ -161,8 +178,10 @@ async def cmd_dashboard(message: Message, state: FSMContext):
 
     link = await create_login_link(message.from_user.id)
     await message.answer(
-        "🔐 <b>Вход в дашборд</b>\n\n"
-        f'<a href="{link}">Открыть дашборд</a>\n\n'
+        "🔐 <b>Вход в админ-панель</b>\n\n"
+        f"<code>{link}</code>\n\n"
+        "Нажмите на ссылку, чтобы скопировать, и откройте в браузере "
+        "на том компьютере, где открыт SSH-туннель к серверу.\n"
         "Ссылка одноразовая и действует 5 минут.",
         reply_markup=main_keyboard
     )
@@ -275,9 +294,9 @@ async def btn_about(message: Message, state: FSMContext):
     )
 
 
-@router.message(F.text == "🖥 Дашборд")
+@router.message(F.text == "🖥 Админ-панель")
 async def btn_dashboard(message: Message, state: FSMContext):
-    """Кнопка дашборда (видна только администраторам)"""
+    """Кнопка админ-панели (видна только администраторам)"""
     await cmd_dashboard(message, state)
 
 

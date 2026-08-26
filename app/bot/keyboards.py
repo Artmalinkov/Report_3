@@ -29,7 +29,7 @@ main_keyboard = ReplyKeyboardMarkup(
 
 
 def get_main_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
-    """Основная клавиатура; администратору добавляется кнопка "Дашборд" """
+    """Основная клавиатура; администратору добавляется кнопка "Админ-панель" """
     keyboard = [
         [
             KeyboardButton(text="📊 Моя статистика"),
@@ -41,7 +41,7 @@ def get_main_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
         ]
     ]
     if is_admin:
-        keyboard.append([KeyboardButton(text="🖥 Дашборд")])
+        keyboard.append([KeyboardButton(text="🖥 Админ-панель")])
     return ReplyKeyboardMarkup(
         keyboard=keyboard,
         resize_keyboard=True,
