@@ -132,6 +132,24 @@ class ReportCRUD(BaseCRUD[Report]):
         """Обновление уровня риска"""
         return await self.update(report_id, risk_level=risk_level)
 
+    async def get_top_companies(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """Топ запрашиваемых компаний по числу отчетов (для дашборда)"""
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(
+                    Report.inn,
+                    func.max(Report.company_name).label("company_name"),
+                    func.count().label("count")
+                )
+                .group_by(Report.inn)
+                .order_by(desc("count"))
+                .limit(limit)
+            )
+            return [
+                {"inn": row.inn, "company_name": row.company_name or "Неизвестно", "count": row.count}
+                for row in result.all()
+            ]
+
     async def get_statistics(self, user_id: Optional[int] = None) -> Dict[str, Any]:
         """Получение статистики по отчетам"""
         async with AsyncSessionLocal() as session:

@@ -16,7 +16,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
 from app.dashboard.auth import consume_login_token
-from app.database.crud import user_crud
+from app.database.crud import user_crud, report_crud, cache_crud
 
 _DASHBOARD_DIR = Path(__file__).parent
 
@@ -60,6 +60,16 @@ async def index(request: Request):
         )
 
     stats = await user_crud.get_dashboard_stats()
+    top_companies = await report_crud.get_top_companies(limit=5)
+    cache_stats = await cache_crud.get_stats()
+    api_usage = {
+        "fns": cache_stats["by_type"].get("fns", 0),
+        "ionet": cache_stats["by_type"].get("ionet", 0),
+    }
     return templates.TemplateResponse(
-        request, "index.html", {"stats": stats}
+        request, "index.html", {
+            "stats": stats,
+            "top_companies": top_companies,
+            "api_usage": api_usage,
+        }
     )
