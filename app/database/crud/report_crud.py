@@ -3,6 +3,7 @@
 """
 CRUD операции для модели Report
 """
+import re
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy import select, and_, or_, func, desc
@@ -11,6 +12,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.crud.base_crud import BaseCRUD
 from app.database.models import Report
 from app.database.session import AsyncSessionLocal
+
+_QUOTED_NAME_RE = re.compile(r'[«"]([^»"]+)[»"]')
+
+
+def _display_company_name(short_name: Optional[str], company_name: Optional[str]) -> str:
+    """
+    Короткое узнаваемое название для компактных списков (дашборд):
+    сокращенное наименование, если есть; иначе — текст в кавычках из
+    полного юрлица ("ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ «Ромашка»"
+    -> "Ромашка") — у старых отчетов (до появления поля short_name)
+    полное название иначе обрезается ровно на скучной юридической форме,
+    не доходя до реального имени
+    """
+    if short_name:
+        return short_name
+    if not company_name:
+        return "Неизвестно"
+    match = _QUOTED_NAME_RE.search(company_name)
+    return match.group(1) if match else company_name
 
 
 class ReportCRUD(BaseCRUD[Report]):
@@ -159,7 +179,7 @@ class ReportCRUD(BaseCRUD[Report]):
             return [
                 {
                     "inn": row.inn,
-                    "name": row.short_name or row.company_name or "Неизвестно",
+                    "name": _display_company_name(row.short_name, row.company_name),
                     "count": row.count,
                 }
                 for row in result.all()
