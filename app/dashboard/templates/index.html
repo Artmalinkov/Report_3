@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Finance Report — Админ-панель</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            padding: 30px;
+            color: #333;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+        .brand img { width: 44px; height: 44px; border-radius: 10px; }
+        .brand .titles h1 { color: #2c3e50; font-size: 20px; }
+        .brand .titles .subtitle { color: #7f8c8d; font-size: 13px; margin-top: 2px; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+        }
+        .card .label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #7f8c8d;
+        }
+        .card .value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-top: 6px;
+        }
+        .footer { margin-top: 24px; font-size: 12px; color: #95a5a6; }
+        .footer a { color: #7f8c8d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="brand">
+            <img src="/static/logo.png" alt="Deep Finance Report">
+            <div class="titles">
+                <h1>Deep Finance Report</h1>
+                <div class="subtitle">Админ-панель</div>
+            </div>
+        </div>
+        <div class="grid">
+            <div class="card">
+                <div class="label">Пользователей всего</div>
+                <div class="value">{{ stats.total }}</div>
+            </div>
+            <div class="card">
+                <div class="label">Активны сегодня</div>
+                <div class="value">{{ stats.active_today }}</div>
+            </div>
+            <div class="card">
+                <div class="label">Активны за неделю</div>
+                <div class="value">{{ stats.active_week }}</div>
+            </div>
+        </div>
+        <div class="footer">Первый виджет каркаса — остальные метрики добавятся следующими шагами. <a href="/logout">Выйти</a></div>
+    </div>
+</body>
+</html>

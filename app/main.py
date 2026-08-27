@@ -60,7 +60,9 @@ async def main():
         dp = Dispatcher()
         dp.include_router(router)
 
-        # Кнопка "Меню" рядом с полем ввода — список команд
+        # Кнопка "Меню" рядом с полем ввода — список команд по умолчанию
+        # (без /dashboard: он не для всех, добавляется отдельно только в
+        # чат с администратором — см. cmd_start)
         await bot.set_my_commands([
             BotCommand(command="start", description="Начать общение"),
             BotCommand(command="help", description="Справка"),

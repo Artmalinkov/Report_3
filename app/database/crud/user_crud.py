@@ -5,7 +5,7 @@ CRUD операции для модели User
 """
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
-from sqlalchemy import select, update, and_, or_
+from sqlalchemy import select, update, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.crud.base_crud import BaseCRUD
@@ -138,6 +138,34 @@ class UserCRUD(BaseCRUD[User]):
             )
             await session.commit()
             return result.rowcount > 0
+
+    async def get_dashboard_stats(self) -> Dict[str, Any]:
+        """
+        Сводная статистика по всем пользователям для дашборда: всего,
+        активные (последний запрос) за сегодня и за последние 7 дней
+        """
+        async with AsyncSessionLocal() as session:
+            total = (await session.execute(
+                select(func.count()).select_from(User)
+            )).scalar() or 0
+
+            today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            active_today = (await session.execute(
+                select(func.count()).select_from(User)
+                .where(User.last_request_at >= today_start)
+            )).scalar() or 0
+
+            week_ago = datetime.utcnow() - timedelta(days=7)
+            active_week = (await session.execute(
+                select(func.count()).select_from(User)
+                .where(User.last_request_at >= week_ago)
+            )).scalar() or 0
+
+            return {
+                "total": total,
+                "active_today": active_today,
+                "active_week": active_week,
+            }
 
     async def get_statistics(self, telegram_id: int) -> Dict[str, Any]:
         """Получение статистики пользователя"""

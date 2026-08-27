@@ -38,5 +38,23 @@ services:
       - "api.telegram.org:149.154.167.220"
     restart: unless-stopped
 
+  dashboard:
+    build: .
+    container_name: report_v_4_dashboard
+    command: uvicorn app.dashboard.main:app --host 0.0.0.0 --port 8080
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Порт публикуется только на loopback самого сервера — снаружи
+    # недоступен, вход только через SSH-туннель (см. ROADMAP: дашборд без
+    # домена/TLS не выставляется в открытый интернет)
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
 volumes:
   postgres_data:

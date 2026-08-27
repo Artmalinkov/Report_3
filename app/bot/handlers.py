@@ -16,7 +16,9 @@ from aiogram.types import (
     BufferedInputFile,
     FSInputFile,
     InlineKeyboardMarkup,
-    ReplyKeyboardRemove
+    ReplyKeyboardRemove,
+    BotCommand,
+    BotCommandScopeChat
 )
 from aiogram.exceptions import TelegramBadRequest
 from loguru import logger
@@ -24,12 +26,14 @@ from loguru import logger
 from app.bot.states import ReportStates
 from app.bot.keyboards import (
     main_keyboard,
+    get_main_keyboard,
     get_report_actions_keyboard,
     get_history_keyboard,
     get_cancel_keyboard,
     quick_actions
 )
 from app.database.crud import user_crud, report_crud, cache_crud
+from app.dashboard.auth import create_login_link
 from app.services.fns_client import FNSClient
 from app.services.ionet_client import IONETClient
 from app.services.report_generator import ReportGenerator
@@ -76,6 +80,21 @@ async def cmd_start(message: Message, state: FSMContext):
 
     logger.info(f"Пользователь {user.telegram_id} запустил бота")
 
+    if user.is_admin:
+        # Персональное меню (кнопка "Меню" у поля ввода) для этого чата —
+        # добавляет /dashboard поверх обычного набора команд, не влияя на
+        # меню остальных пользователей (у них — глобальный список из main.py)
+        await message.bot.set_my_commands(
+            [
+                BotCommand(command="start", description="Начать общение"),
+                BotCommand(command="help", description="Справка"),
+                BotCommand(command="history", description="История запросов"),
+                BotCommand(command="stats", description="Моя статистика"),
+                BotCommand(command="dashboard", description="Админ-панель"),
+            ],
+            scope=BotCommandScopeChat(chat_id=message.chat.id)
+        )
+
     mode_text = "🔧 <b>Режим:</b> РАЗРАБОТКА (мок-данные)\n" if settings.DEBUG else ""
 
     await message.answer(
@@ -88,7 +107,7 @@ async def cmd_start(message: Message, state: FSMContext):
         "/help - Получить справку\n"
         "/history - История запросов\n"
         "/stats - Моя статистика",
-        reply_markup=main_keyboard
+        reply_markup=get_main_keyboard(user.is_admin)
     )
 
 
@@ -143,6 +162,27 @@ async def cmd_stats(message: Message, state: FSMContext):
         f"📅 За последнюю неделю: <b>{stats.get('last_week', 0)}</b>\n\n"
         f"👤 Статус: {'✅ Активен' if stats.get('is_active') else '❌ Неактивен'}\n"
         f"🛡 Администратор: {'✅ Да' if stats.get('is_admin') else '❌ Нет'}",
+        reply_markup=main_keyboard
+    )
+
+
+@router.message(Command("dashboard"))
+async def cmd_dashboard(message: Message, state: FSMContext):
+    """Обработчик команды /dashboard — одноразовая ссылка для входа в админ-дашборд"""
+    await state.clear()
+
+    user = await user_crud.get_by_telegram_id(message.from_user.id)
+    if not user or not user.is_admin:
+        await message.answer("🚫 Доступ ограничен.", reply_markup=main_keyboard)
+        return
+
+    link = await create_login_link(message.from_user.id)
+    await message.answer(
+        "🔐 <b>Вход в админ-панель</b>\n\n"
+        f"<code>{link}</code>\n\n"
+        "Нажмите на ссылку, чтобы скопировать, и откройте в браузере "
+        "на том компьютере, где открыт SSH-туннель к серверу.\n"
+        "Ссылка одноразовая и действует 5 минут.",
         reply_markup=main_keyboard
     )
 
@@ -243,6 +283,12 @@ async def btn_about(message: Message, state: FSMContext):
         "• Сохранение истории запросов",
         reply_markup=main_keyboard
     )
+
+
+@router.message(F.text == "🖥 Админ-панель")
+async def btn_dashboard(message: Message, state: FSMContext):
+    """Кнопка админ-панели (видна только администраторам)"""
+    await cmd_dashboard(message, state)
 
 
 @router.message(F.text == "❌ Отмена")

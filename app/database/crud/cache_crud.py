@@ -94,6 +94,14 @@ class CacheCRUD(BaseCRUD[Cache]):
             except json.JSONDecodeError:
                 return cache_entry.data
 
+    async def delete_cache(self, cache_key: str) -> None:
+        """Удаление одной записи кеша по ключу (например, одноразовый токен после использования)"""
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                delete(Cache).where(Cache.cache_key == cache_key)
+            )
+            await session.commit()
+
     async def delete_expired(self) -> int:
         """Удаление просроченного кеша"""
         async with AsyncSessionLocal() as session:
