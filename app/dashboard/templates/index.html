@@ -40,6 +40,35 @@
             color: #2c3e50;
             margin-top: 6px;
         }
+        .card details { margin-top: 12px; }
+        .card summary {
+            cursor: pointer;
+            font-size: 12px;
+            color: #4CAF50;
+            font-weight: 600;
+            list-style: none;
+        }
+        .card summary::-webkit-details-marker { display: none; }
+        .card summary::before { content: '▸ '; }
+        .card details[open] summary::before { content: '▾ '; }
+        .user-table-wrap { max-height: 220px; overflow-y: auto; margin-top: 10px; }
+        table.user-list { width: 100%; border-collapse: collapse; font-size: 12px; }
+        table.user-list th {
+            text-align: left;
+            padding: 4px 6px;
+            color: #95a5a6;
+            font-weight: 600;
+            border-bottom: 1px solid #ecf0f1;
+            position: sticky;
+            top: 0;
+            background: white;
+        }
+        table.user-list td {
+            padding: 4px 6px;
+            border-bottom: 1px solid #f4f6f7;
+            color: #444;
+        }
+        table.user-list .empty { color: #b0b8bd; font-style: italic; }
         .footer { margin-top: 24px; font-size: 12px; color: #95a5a6; }
         .footer a { color: #7f8c8d; }
     </style>
@@ -54,20 +83,48 @@
             </div>
         </div>
         <div class="grid">
+            {% macro user_list(users) %}
+            <div class="user-table-wrap">
+                <table class="user-list">
+                    <tr><th>Пользователь</th><th>ID</th><th>Посл. запрос</th></tr>
+                    {% for u in users %}
+                    <tr>
+                        <td>{{ ('@' + u.username) if u.username else (u.first_name or '—') }}</td>
+                        <td>{{ u.telegram_id }}</td>
+                        <td>{{ u.last_request_at.strftime('%d.%m.%Y %H:%M') if u.last_request_at else '—' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="3" class="empty">Пусто</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+            {% endmacro %}
             <div class="card">
                 <div class="label">Пользователей всего</div>
                 <div class="value">{{ stats.total }}</div>
+                <details>
+                    <summary>Показать список</summary>
+                    {{ user_list(stats.users_total) }}
+                </details>
             </div>
             <div class="card">
                 <div class="label">Активны сегодня</div>
                 <div class="value">{{ stats.active_today }}</div>
+                <details>
+                    <summary>Показать список</summary>
+                    {{ user_list(stats.users_today) }}
+                </details>
             </div>
             <div class="card">
                 <div class="label">Активны за неделю</div>
                 <div class="value">{{ stats.active_week }}</div>
+                <details>
+                    <summary>Показать список</summary>
+                    {{ user_list(stats.users_week) }}
+                </details>
             </div>
         </div>
-        <div class="footer">Первый виджет каркаса — остальные метрики добавятся следующими шагами. <a href="/logout">Выйти</a></div>
+        <div class="footer"><a href="/logout">Выйти</a></div>
     </div>
 </body>
 </html>

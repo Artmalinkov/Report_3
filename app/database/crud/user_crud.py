@@ -5,7 +5,7 @@ CRUD операции для модели User
 """
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
-from sqlalchemy import select, update, and_, or_, func
+from sqlalchemy import select, update, and_, or_, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.crud.base_crud import BaseCRUD
@@ -142,29 +142,28 @@ class UserCRUD(BaseCRUD[User]):
     async def get_dashboard_stats(self) -> Dict[str, Any]:
         """
         Сводная статистика по всем пользователям для дашборда: всего,
-        активные (последний запрос) за сегодня и за последние 7 дней
+        активные (последний запрос) за сегодня и за последние 7 дней —
+        вместе со списками самих пользователей для каждой группы
+        (раскрывающиеся списки под виджетами)
         """
         async with AsyncSessionLocal() as session:
-            total = (await session.execute(
-                select(func.count()).select_from(User)
-            )).scalar() or 0
+            all_users = (await session.execute(
+                select(User).order_by(desc(User.last_request_at))
+            )).scalars().all()
 
             today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-            active_today = (await session.execute(
-                select(func.count()).select_from(User)
-                .where(User.last_request_at >= today_start)
-            )).scalar() or 0
-
             week_ago = datetime.utcnow() - timedelta(days=7)
-            active_week = (await session.execute(
-                select(func.count()).select_from(User)
-                .where(User.last_request_at >= week_ago)
-            )).scalar() or 0
+
+            users_today = [u for u in all_users if u.last_request_at and u.last_request_at >= today_start]
+            users_week = [u for u in all_users if u.last_request_at and u.last_request_at >= week_ago]
 
             return {
-                "total": total,
-                "active_today": active_today,
-                "active_week": active_week,
+                "total": len(all_users),
+                "active_today": len(users_today),
+                "active_week": len(users_week),
+                "users_total": all_users,
+                "users_today": users_today,
+                "users_week": users_week,
             }
 
     async def get_statistics(self, telegram_id: int) -> Dict[str, Any]:
