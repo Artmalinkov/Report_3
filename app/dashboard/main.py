@@ -32,7 +32,7 @@ async def login(request: Request, token: str):
     telegram_id = await consume_login_token(token)
     if telegram_id is None:
         return HTMLResponse(
-            "<p>Ссылка недействительна или уже использована. "
+            "<p>Ссылка недействительна или истекла (15 минут). "
             "Отправьте боту команду /dashboard ещё раз.</p>",
             status_code=403,
         )

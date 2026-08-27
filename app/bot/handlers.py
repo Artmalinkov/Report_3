@@ -182,7 +182,7 @@ async def cmd_dashboard(message: Message, state: FSMContext):
         f"<code>{link}</code>\n\n"
         "Нажмите на ссылку, чтобы скопировать, и откройте в браузере "
         "на том компьютере, где открыт SSH-туннель к серверу.\n"
-        "Ссылка одноразовая и действует 5 минут.",
+        "Ссылка действует 15 минут.",
         reply_markup=main_keyboard
     )
 
