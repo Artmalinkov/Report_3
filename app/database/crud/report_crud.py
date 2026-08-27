@@ -26,6 +26,7 @@ class ReportCRUD(BaseCRUD[Report]):
             html_content: str,
             analysis_summary: Optional[str] = None,
             company_name: Optional[str] = None,
+            short_name: Optional[str] = None,
             ogrn: Optional[str] = None,
             period: Optional[str] = None,
             risk_level: Optional[str] = None,
@@ -41,6 +42,7 @@ class ReportCRUD(BaseCRUD[Report]):
             html_content=html_content,
             analysis_summary=analysis_summary,
             company_name=company_name,
+            short_name=short_name,
             ogrn=ogrn,
             period=period,
             risk_level=risk_level,
@@ -133,20 +135,33 @@ class ReportCRUD(BaseCRUD[Report]):
         return await self.update(report_id, risk_level=risk_level)
 
     async def get_top_companies(self, limit: int = 5) -> List[Dict[str, Any]]:
-        """Топ запрашиваемых компаний по числу отчетов (для дашборда)"""
+        """
+        Топ запрашиваемых компаний по числу отчетов (для дашборда).
+        Тестовые компании (см. app.services.mock_data.MOCK_COMPANIES —
+        использовались для локальной разработки, а не реальными
+        пользователями) в выборку не попадают.
+        """
+        from app.services.mock_data import MOCK_COMPANIES
+
         async with AsyncSessionLocal() as session:
             result = await session.execute(
                 select(
                     Report.inn,
+                    func.max(Report.short_name).label("short_name"),
                     func.max(Report.company_name).label("company_name"),
                     func.count().label("count")
                 )
+                .where(Report.inn.notin_(MOCK_COMPANIES.keys()))
                 .group_by(Report.inn)
                 .order_by(desc("count"))
                 .limit(limit)
             )
             return [
-                {"inn": row.inn, "company_name": row.company_name or "Неизвестно", "count": row.count}
+                {
+                    "inn": row.inn,
+                    "name": row.short_name or row.company_name or "Неизвестно",
+                    "count": row.count,
+                }
                 for row in result.all()
             ]
 

@@ -75,14 +75,18 @@
         ol.top-list li {
             display: flex;
             justify-content: space-between;
+            align-items: baseline;
             gap: 8px;
             padding: 6px 0;
             border-bottom: 1px solid #f4f6f7;
             font-size: 13px;
         }
         ol.top-list li:last-child { border-bottom: none; }
-        ol.top-list .name { color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        ol.top-list .count { color: #2c3e50; font-weight: 700; flex-shrink: 0; }
+        ol.top-list .left { display: flex; align-items: baseline; flex: 1; min-width: 0; }
+        ol.top-list .cname { color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        ol.top-list .inn { color: #b0b8bd; font-weight: 400; flex-shrink: 0; margin-left: 5px; white-space: nowrap; }
+        ol.top-list .count { color: #2c3e50; font-weight: 700; flex-shrink: 0; margin-left: 12px; }
+        .card.wide { grid-column: span 2; }
         .api-rows { margin-top: 6px; }
         .api-rows .row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 14px; }
         .api-rows .row .name { color: #7f8c8d; }
@@ -141,22 +145,28 @@
                 </details>
             </div>
             <div class="card">
-                <div class="label">Топ компаний</div>
-                <ol class="top-list">
-                    {% for c in top_companies %}
-                    <li><span class="name">{{ c.company_name | truncate(34) }}</span><span class="count">{{ c.count }}</span></li>
-                    {% else %}
-                    <li><span class="name" style="font-style: italic; color: #b0b8bd;">Пока нет данных</span></li>
-                    {% endfor %}
-                </ol>
-            </div>
-            <div class="card">
                 <div class="label">Расход платных API</div>
                 <div class="api-rows">
                     <div class="row"><span class="name">ФНС</span><span class="value">{{ api_usage.fns }}</span></div>
                     <div class="row"><span class="name">IO_NET</span><span class="value">{{ api_usage.ionet }}</span></div>
                 </div>
                 <div class="note">Оценка по текущему кэшу (~24ч), не общий счётчик за всё время</div>
+            </div>
+            <div class="card wide">
+                <div class="label">Топ компаний</div>
+                <ol class="top-list">
+                    {% for c in top_companies %}
+                    <li>
+                        <span class="left">
+                            <span class="cname">{{ c.name }}</span>
+                            <span class="inn">· ИНН {{ c.inn }}</span>
+                        </span>
+                        <span class="count">{{ c.count }}</span>
+                    </li>
+                    {% else %}
+                    <li><span class="name" style="font-style: italic; color: #b0b8bd;">Пока нет данных</span></li>
+                    {% endfor %}
+                </ol>
             </div>
         </div>
         <div class="footer"><a href="/logout">Выйти</a></div>

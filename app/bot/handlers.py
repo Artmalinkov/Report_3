@@ -457,6 +457,7 @@ async def handle_inn(message: Message, state: FSMContext):
             html_content=html_content,
             analysis_summary=analysis.get('summary', ''),
             company_name=financial_data.get('company_name'),
+            short_name=financial_data.get('short_name'),
             ogrn=financial_data.get('ogrn'),
             period=financial_data.get('period'),
             risk_level=analysis.get('risk_level'),

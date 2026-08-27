@@ -21,6 +21,7 @@ class Report(Base, BaseModel):
     # Данные компании
     inn = Column(String(12), index=True, nullable=False)
     company_name = Column(String(255), nullable=True)
+    short_name = Column(String(255), nullable=True)
     ogrn = Column(String(15), nullable=True)
     period = Column(String(20), nullable=True)  # Год отчетности
 
