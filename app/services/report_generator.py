@@ -434,14 +434,29 @@ class ReportGenerator:
             }, ensure_ascii=False),
         }
 
-    @staticmethod
-    def _render_text(text) -> str:
+    # Короткие (1-2 буквы) предлоги и союзы, после которых по правилам
+    # русской типографики ставится неразрывный пробел — чтобы такое слово
+    # не "повисало" одно в конце строки при переносе
+    _SHORT_WORDS_RE = re.compile(
+        r'\b(а|и|о|у|я|к|с|в|но|же|ли|бы|то|на|по|до|из|за|от|об|со|во|ко)[ ](?=\S)',
+        re.IGNORECASE
+    )
+
+    @classmethod
+    def _prevent_line_orphans(cls, text: str) -> str:
+        """Заменяет обычный пробел после короткого предлога/союза на неразрывный (\\xa0)"""
+        return cls._SHORT_WORDS_RE.sub(lambda m: m.group(1) + "\xa0", text)
+
+    @classmethod
+    def _render_text(cls, text) -> str:
         """
         Подготовка текста (от ИИ или из данных ФНС) к вставке в HTML:
         экранирует спецсимволы, чтобы сырой текст не превращался в разметку
-        страницы, и конвертирует markdown **жирный** в <strong> — модель
+        страницы, конвертирует markdown **жирный** в <strong> — модель
         систематически форматирует ответы жирным текстом, а Jinja2-шаблон
-        вставляет строку как есть, без интерпретации markdown.
+        вставляет строку как есть, без интерпретации markdown, — и
+        расставляет неразрывные пробелы после коротких предлогов/союзов
+        (см. _prevent_line_orphans).
         """
         if not text:
             return text
@@ -450,6 +465,7 @@ class ReportGenerator:
                     .replace("<", "&lt;")
                     .replace(">", "&gt;"))
         text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+        text = cls._prevent_line_orphans(text)
         return text
 
     @staticmethod
