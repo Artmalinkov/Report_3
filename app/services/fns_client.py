@@ -24,6 +24,12 @@ BALANCE_CODES = {
     "capital": "1300",
     "long_term_liabilities": "1400",
     "short_term_liabilities": "1500",
+    # Детализация — проверена на реальном ответе (ИНН 7736207543):
+    # 1210+1220+1230+1240+1250+1260 = 1200 сходится
+    "inventory": "1210",  # запасы
+    "receivables": "1230",  # дебиторская задолженность
+    "cash": "1250",  # денежные средства
+    "payables": "1520",  # кредиторская задолженность
 }
 
 PROFIT_LOSS_CODES = {
@@ -33,6 +39,24 @@ PROFIT_LOSS_CODES = {
     "profit_from_sales": "2200",
     "profit": "2300",  # прибыль (убыток) до налогообложения
     "net_profit": "2400",
+    # Детализация — проверена на реальном ответе (ИНН 7736207543)
+    "interest_receivable": "2320",  # проценты к получению
+    "other_income": "2340",  # прочие доходы
+    "other_expenses": "2350",  # прочие расходы
+}
+
+# Форма №4 "Отчет о движении денежных средств" (Приказ Минфина №66н) —
+# только сальдо по видам деятельности и остатки денежных средств, без
+# построчной детализации (~30 кодов 4100-4500) — проверено арифметически
+# на реальном ответе (ИНН 7736207543, 2024 год): 4100+4200+4300 = 4400,
+# 4450+4400+4490 = 4500
+CASH_FLOW_CODES = {
+    "operating_flow": "4100",  # сальдо от текущих (операционных) операций
+    "investing_flow": "4200",  # сальдо от инвестиционных операций
+    "financing_flow": "4300",  # сальдо от финансовых операций
+    "net_flow": "4400",  # итоговое сальдо денежных потоков за период
+    "cash_start": "4450",  # остаток денежных средств на начало периода
+    "cash_end": "4500",  # остаток денежных средств на конец периода
 }
 
 # Коды форм 0409806 "Бухгалтерский баланс (публикуемая форма)" и 0409807
@@ -145,6 +169,14 @@ class FNSClient:
             raise ValueError(f"Компания с ИНН {inn} не найдена в ФНС")
 
         financial = await self._get_financial_data(inn)
+        risk_flags = await self._get_risk_flags(inn)
+
+        staff_count = company_info["staff_count"]
+        if not staff_count and risk_flags.get("staff_count"):
+            # ССЧР (среднесписочная численность) внутри check.Позитив.РеестрМСП
+            # оказалась более надежным источником, чем ОткрСведения.КолРаб —
+            # см. комментарий в _get_company_info про непроверенность последнего
+            staff_count = risk_flags["staff_count"]
 
         result = {
             "inn": inn,
@@ -154,21 +186,80 @@ class FNSClient:
             "period": financial.get("period", ""),
             "balance": financial.get("balance", {}),
             "profit_loss": financial.get("profit_loss", {}),
+            "cash_flow": financial.get("cash_flow", {}),
             "status": company_info["status"],
             "registration_date": company_info["registration_date"],
             "termination_date": company_info["termination_date"],
             "charter_capital": company_info["charter_capital"],
-            "staff_count": company_info["staff_count"],
+            "staff_count": staff_count,
+            "okved": company_info["okved"],
+            "egr_extra": company_info["egr_extra"],
             "legal_address": company_info["address"],
             "updated_at": datetime.utcnow().isoformat(),
             # {год: {"balance": ..., "profit_loss": ...}} за последние (до)
             # 3 года, от старого к новому; для ИП или при недоступности
             # отчетности — пустой словарь
             "years": financial.get("years", {}),
+            # Флаги риска ФНС (метод check) — см. _get_risk_flags
+            "risk_flags": risk_flags,
         }
 
         logger.info(f"Данные для ИНН {inn} получены: {result['company_name']}")
         return result
+
+    @staticmethod
+    def _summarize_egr_extra(block: Dict[str, Any]) -> str:
+        """
+        Сжатая сводка по Лицензиям/ДопВидДеят/Филиалам/Участиям/СПВЗ/Истории
+        из egr — для промпта ИИ-анализа, не для отображения в отчете (см.
+        ROADMAP). Эти блоки могут быть огромными (у Сбербанка, например,
+        341 запись СПВЗ и 88 филиалов) — целиком в промпт не поместится и
+        не нужно, модели достаточно сводки и нескольких свежих событий.
+        Работает одинаково для ЮЛ и ИП (передаем блок целиком) — просто
+        для ИП большинство списков обычно пустые, .get() это переживает
+        без ошибок.
+        """
+        lines = []
+
+        licenses = block.get("Лицензии") or []
+        if licenses:
+            types = sorted({l.get("ВидДеятельности", "") for l in licenses if l.get("ВидДеятельности")})
+            preview = "; ".join(types[:3])
+            if len(types) > 3:
+                preview += f" и еще {len(types) - 3}"
+            lines.append(f"Лицензии: {len(licenses)} шт. ({preview})")
+
+        extra_okved = block.get("ДопВидДеят") or []
+        if extra_okved:
+            texts = [f"{d.get('Код', '')} — {d.get('Текст', '')}" for d in extra_okved if d.get("Текст")]
+            if texts:
+                lines.append("Дополнительные виды деятельности: " + "; ".join(texts))
+
+        branches = block.get("Филиалы") or []
+        if branches:
+            lines.append(f"Филиалы: {len(branches)} шт.")
+
+        participations = block.get("Участия") or []
+        if participations:
+            names = [p.get("НаимСокрЮЛ", "") for p in participations if p.get("НаимСокрЮЛ")][:3]
+            preview = "; ".join(names)
+            if len(participations) > len(names):
+                preview += f" и еще {len(participations) - len(names)}"
+            lines.append(f"Участие в других организациях: {len(participations)} шт. ({preview})")
+
+        spvz = block.get("СПВЗ") or []
+        if spvz:
+            recent = sorted(spvz, key=lambda x: x.get("Дата", ""), reverse=True)[:3]
+            recent_text = "; ".join(f"{r.get('Дата', '')}: {r.get('Текст', '')}" for r in recent)
+            lines.append(f"Регистрационные действия: {len(spvz)} записей за все время, последние — {recent_text}")
+
+        history = block.get("История") or {}
+        if history:
+            parts = [f"{key}: {len(sub)} изм." for key, sub in history.items() if isinstance(sub, (dict, list))]
+            if parts:
+                lines.append("История изменений сведений: " + ", ".join(parts))
+
+        return "\n".join(lines)
 
     async def _get_company_info(self, inn: str) -> Optional[Dict[str, Any]]:
         """
@@ -180,6 +271,21 @@ class FNSClient:
             return None
 
         entry = items[0]
+
+        def _format_okved(block: Dict[str, Any]) -> str:
+            """
+            Основной вид деятельности (ОКВЭД) — проверено на реальных
+            данных для ЮЛ (Сбербанк: "64.19 — Денежное посредничество
+            прочее") и для ИП (Мингараев: "13.92 — Производство готовых
+            текстильных изделий, кроме одежды"), структура ОснВидДеят
+            одинакова для обоих типов
+            """
+            osn = block.get("ОснВидДеят") or {}
+            code = osn.get("Код", "")
+            text = osn.get("Текст", "")
+            if code and text:
+                return f"{code} — {text}"
+            return code or text
 
         if "ЮЛ" in entry:
             ul = entry["ЮЛ"]
@@ -211,6 +317,11 @@ class FNSClient:
                 # компании его раскрывают, либо название неточное. .get() —
                 # если поля нет, строка просто не покажется в отчете
                 "staff_count": (ul.get("ОткрСведения") or {}).get("КолРаб", ""),
+                "okved": _format_okved(ul),
+                # Сжатая сводка Лицензии/ДопВидДеят/Филиалы/Участия/СПВЗ/
+                # История — только для промпта ИИ, в отчете не показываем
+                # (см. ROADMAP: возможен отдельный раздел "справка о компании")
+                "egr_extra": self._summarize_egr_extra(ul),
                 "address": (ul.get("Адрес") or {}).get("АдресПолн", ""),
             }
 
@@ -222,6 +333,8 @@ class FNSClient:
                 # У ИП нет уставного капитала как правовой категории
                 "charter_capital": "",
                 "staff_count": (ip.get("ОткрСведения") or {}).get("КолРаб", ""),
+                "okved": _format_okved(ip),
+                "egr_extra": self._summarize_egr_extra(ip),
                 "ogrn": ip.get("ОГРНИП", ""),
                 "status": ip.get("Статус", "Неизвестно"),
                 "registration_date": ip.get("ДатаРег", ""),
@@ -231,6 +344,49 @@ class FNSClient:
 
         return None
 
+    async def _get_risk_flags(self, inn: str) -> Dict[str, Any]:
+        """
+        Флаги риска ФНС (метод check) — готовые признаки добросовестности/
+        неблагонадежности контрагента. Проверено на 4 реальных примерах
+        (крупный банк, ликвидированная компания, малое предприятие, ИП):
+        Позитив: Лицензии, Филиалы, КапБолее50тыс, РеестрМСП{...}, ПоддержкаМСП[...]
+        Негатив: РеестрМассАдрес, МассАдрес, Статус, ИсклИзРеестраМСП,
+        НедостоверАдрес, БлокСчета, РискНалогПроверки. Оба блока всегда
+        содержат готовый текст в "Текст" — используем как есть, без
+        собственного форматирования отдельных флагов.
+
+        check — не критичный для отчета источник: при ошибке отчет должен
+        собраться и без него, поэтому исключение наружу не пробрасываем.
+        """
+        empty = {"positive_text": "", "negative_text": "", "positive": {}, "negative": {}, "staff_count": ""}
+        try:
+            data = await self._call("check", inn)
+        except Exception as e:
+            logger.warning(f"Не удалось получить флаги ФНС (check) для {inn}: {e}")
+            return empty
+
+        items = data.get("items") or []
+        if not items:
+            return empty
+
+        entry = items[0]
+        block = entry.get("ЮЛ") or entry.get("ИП") or {}
+        positive = block.get("Позитив") or {}
+        negative = block.get("Негатив") or {}
+
+        # ССЧР (среднесписочная численность) лежит внутри Позитив.РеестрМСП —
+        # более надежный источник staff_count, чем ОткрСведения.КолРаб (см.
+        # комментарий в _get_company_info)
+        staff_count = (positive.get("РеестрМСП") or {}).get("ССЧР", "")
+
+        return {
+            "positive_text": positive.get("Текст", ""),
+            "negative_text": negative.get("Текст", ""),
+            "positive": positive,
+            "negative": negative,
+            "staff_count": staff_count,
+        }
+
     async def _get_financial_data(self, inn: str) -> Dict[str, Any]:
         """
         Бухгалтерская отчетность по данным ФНС (метод bo).
@@ -238,7 +394,7 @@ class FNSClient:
         ИП такую отчетность, как правило, не сдают (работают по декларациям) —
         для них метод вернет пустой результат, это ожидаемое поведение.
         """
-        empty = {"period": "", "balance": {}, "profit_loss": {}}
+        empty = {"period": "", "balance": {}, "profit_loss": {}, "cash_flow": {}}
 
         try:
             data = await self._call("bo", inn)
@@ -271,21 +427,22 @@ class FNSClient:
 
         years: Dict[str, Dict[str, Any]] = {}
         for year in recent_years:
-            balance, profit_loss = parse(company_block[year])
-            years[year] = {"balance": balance, "profit_loss": profit_loss}
+            balance, profit_loss, cash_flow = parse(company_block[year])
+            years[year] = {"balance": balance, "profit_loss": profit_loss, "cash_flow": cash_flow}
 
         return {
             "period": latest_year,
             "balance": years[latest_year]["balance"],
             "profit_loss": years[latest_year]["profit_loss"],
+            "cash_flow": years[latest_year]["cash_flow"],
             # Данные за последние (до) 3 года, от старого к новому, для
             # отчета с разбивкой по годам и AI-анализа динамики
             "years": years,
         }
 
     @staticmethod
-    def _parse_standard_form(year_data: Dict[str, Any]) -> tuple[Dict[str, str], Dict[str, str]]:
-        """Формы №1 и №2 (Приказ Минфина №66н) — обычные компании"""
+    def _parse_standard_form(year_data: Dict[str, Any]) -> tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
+        """Формы №1, №2 и №4 (Приказ Минфина №66н) — обычные компании"""
 
         def get(code: str) -> str:
             return _thousands_to_rubles(str(year_data.get(code, "0")))
@@ -302,10 +459,20 @@ class FNSClient:
         # отсутствующий показатель угаданным числом
         profit_loss["ebitda"] = NOT_AVAILABLE
 
-        return balance, profit_loss
+        # Форма №4 есть не у всех компаний (упрощенная отчетность может ее
+        # не включать) — код "4100" как индикатор наличия, чтобы не
+        # показывать в отчете строку из одних нулей
+        has_cash_flow_form = "4100" in year_data
+        cash_flow = (
+            {key: get(code) for key, code in CASH_FLOW_CODES.items()}
+            if has_cash_flow_form
+            else {key: NOT_AVAILABLE for key in CASH_FLOW_CODES}
+        )
+
+        return balance, profit_loss, cash_flow
 
     @staticmethod
-    def _parse_credit_form(year_data: Dict[str, Any]) -> tuple[Dict[str, str], Dict[str, str]]:
+    def _parse_credit_form(year_data: Dict[str, Any]) -> tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
         """Формы 0409806/0409807 — кредитные организации (банки)"""
 
         def get(section_code: tuple[str, str]) -> Optional[str]:
@@ -338,5 +505,9 @@ class FNSClient:
             "operating_expenses": NOT_AVAILABLE,
             "ebitda": NOT_AVAILABLE,
         }
+        # У банков движение денежных средств — форма credit_cash_flow с
+        # другой структурой строк (задача "Банковская форма" в дорожной
+        # карте), сюда пока не подключена
+        cash_flow = {key: NOT_AVAILABLE for key in CASH_FLOW_CODES}
 
-        return balance, profit_loss
+        return balance, profit_loss, cash_flow

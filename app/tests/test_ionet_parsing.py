@@ -4,6 +4,7 @@
 к реальному API, только на синтетических примерах текста.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -55,6 +56,36 @@ def test_parse_sections_does_not_break_on_word_inside_sentence():
     assert sections["УРОВЕНЬ РИСКА"] == "Средний"
 
 
+def test_parse_sections_keeps_content_on_same_line_as_heading():
+    """
+    Регресс-тест на реальный баг: модель не всегда переносит текст секции
+    на новую строку — иногда пишет "1. **ЗАГОЛОВОК**: текст сразу здесь"
+    одной строкой. Раньше вся строка потреблялась как заголовок, а текст
+    после двоеточия терялся полностью (воспроизведено на реальном ответе
+    IO_NET для компании без бухотчетности, где "финансовое состояние" и
+    "рекомендации" пришли одной строкой каждая, а "риски" — списком на
+    отдельных строках, поэтому баг был виден не на всех секциях сразу).
+    """
+    content = (
+        '1. **ФИНАНСОВОЕ СОСТОЯНИЕ**: Бухгалтерская отчетность недоступна, '
+        'оценка ограничена.\n\n'
+        '2. **КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ**: Недоступны — нет отчетности.\n\n'
+        '3. **РИСКИ**: Выявленные риски включают:\n'
+        '   - Ликвидация по 129-ФЗ\n'
+        '   - Блокировка счета\n\n'
+        '4. **РЕКОМЕНДАЦИИ**: Проявлять осторожность при работе с этой компанией.\n\n'
+        '5. **УРОВЕНЬ РИСКА**: Высокий\n'
+    )
+
+    sections = client._parse_sections(content, SINGLE_ANALYSIS_LABELS)
+
+    assert sections["ФИНАНСОВОЕ СОСТОЯНИЕ"] == "Бухгалтерская отчетность недоступна, оценка ограничена."
+    assert sections["КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ"] == "Недоступны — нет отчетности."
+    assert "Ликвидация по 129-ФЗ" in sections["РИСКИ"]
+    assert sections["РЕКОМЕНДАЦИИ"] == "Проявлять осторожность при работе с этой компанией."
+    assert sections["УРОВЕНЬ РИСКА"] == "Высокий"
+
+
 def test_parse_analysis_response_extracts_risk_level():
     """Полный путь: choices -> секции -> уровень риска"""
     content = (
@@ -89,6 +120,63 @@ def test_parse_comparison_response():
     assert result["leader"] == "Сбербанк опережает по всем показателям."
     assert "Газпром" in result["differences"]
     assert result["recommendation"] == "Рассмотреть Сбербанк."
+
+
+def test_parse_analysis_response_reads_structured_json():
+    """
+    Основной путь после перехода на response_format: json_schema (см.
+    ANALYSIS_RESPONSE_FORMAT) — модель отвечает готовым JSON, разбор
+    сводится к json.loads без построчного разбора секций
+    """
+    payload = {
+        "summary": "Компания стабильна.",
+        "key_metrics": "Рентабельность 15%.",
+        "dynamics": "Выручка выросла на 20%.",
+        "risks": "Минимальные.",
+        "recommendations": "Продолжать текущую стратегию.",
+        "risk_level": "Низкий",
+    }
+    response = {"choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}]}
+
+    result = client._parse_analysis_response(response)
+
+    assert result["summary"] == "Компания стабильна."
+    assert result["risk_level"] == "Низкий"
+    assert result["dynamics"] == "Выручка выросла на 20%."
+
+
+def test_parse_analysis_response_falls_back_to_sections_on_invalid_json():
+    """
+    Если резервная модель (FALLBACK_MODELS) не поддержала guided decoding и
+    ответила свободным текстом вместо JSON — не падаем, а разбираем как
+    раньше, по заголовкам секций
+    """
+    content = (
+        "1. ФИНАНСОВОЕ СОСТОЯНИЕ\nВсе стабильно.\n\n"
+        "5. УРОВЕНЬ РИСКА\nНизкий\n"
+    )
+    response = {"choices": [{"message": {"content": content}}]}
+
+    result = client._parse_analysis_response(response)
+
+    assert result["summary"] == "Все стабильно."
+    assert result["risk_level"] == "Низкий"
+
+
+def test_parse_comparison_response_reads_structured_json():
+    """Аналогично test_parse_analysis_response_reads_structured_json, для сравнительного анализа"""
+    payload = {
+        "summary": "Обе компании устойчивы.",
+        "leader": "Сбербанк опережает по всем показателям.",
+        "differences": "Газпром зависит от внешней конъюнктуры.",
+        "recommendation": "Рассмотреть Сбербанк.",
+    }
+    response = {"choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}]}
+
+    result = client._parse_comparison_response(response)
+
+    assert result["summary"] == "Обе компании устойчивы."
+    assert result["leader"] == "Сбербанк опережает по всем показателям."
 
 
 def test_parse_sections_handles_missing_sections_gracefully():
@@ -129,6 +217,9 @@ if __name__ == "__main__":
     test_parse_sections_does_not_break_on_word_inside_sentence()
     test_parse_analysis_response_extracts_risk_level()
     test_parse_comparison_response()
+    test_parse_analysis_response_reads_structured_json()
+    test_parse_analysis_response_falls_back_to_sections_on_invalid_json()
+    test_parse_comparison_response_reads_structured_json()
     test_parse_sections_handles_missing_sections_gracefully()
     test_determine_risk_level_fallback_to_content_scan()
     print("OK")

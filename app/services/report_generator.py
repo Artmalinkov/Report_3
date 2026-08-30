@@ -247,6 +247,7 @@ class ReportGenerator:
         """Подготовка данных для шаблона"""
         balance = financial_data.get("balance", {})
         profit_loss = financial_data.get("profit_loss", {})
+        cash_flow = financial_data.get("cash_flow", {})
         # У части компаний (особенно новых или сдающих отчетность не по
         # общей системе) ФНС просто не располагает бухотчетностью вообще —
         # balance/profit_loss приходят полностью пустыми. Раньше это молча
@@ -274,6 +275,16 @@ class ReportGenerator:
 
         # Коэффициент автономии
         autonomy_ratio = (capital / assets * 100) if assets > 0 else 0
+
+        # Коэффициент текущей ликвидности (оборотные активы / краткосрочные
+        # обязательства) — считаем сами, а не полагаемся на ИИ, чтобы
+        # значение всегда было точным и не зависело от качества генерации
+        current_assets_val = self._safe_float(get_safe_value(balance, "current_assets", "0"))
+        short_term_liabilities_val = self._safe_float(get_safe_value(balance, "short_term_liabilities", "0"))
+        current_ratio = (
+            current_assets_val / short_term_liabilities_val
+            if short_term_liabilities_val > 0 else None
+        )
 
         risk_level = analysis.get("risk_level", "Средний")
         risk_color = {
@@ -363,8 +374,13 @@ class ReportGenerator:
                 if financial_data.get("charter_capital") else "Н/Д"
             ),
             "staff_count": financial_data.get("staff_count") or "Н/Д",
+            "okved": self._render_text(financial_data.get("okved", "")) or "Н/Д",
             "legal_address": self._render_text(financial_data.get("legal_address", "")),
             "has_financial_data": has_financial_data,
+
+            # Флаги риска ФНС (метод check) — готовый текст, только экранируем
+            "risk_positive_text": self._render_text(financial_data.get("risk_flags", {}).get("positive_text", "")),
+            "risk_negative_text": self._render_text(financial_data.get("risk_flags", {}).get("negative_text", "")),
 
             # Финансовые показатели (форматированные). Без данных — честное
             # "Н/Д", а не 0 руб. и 0.0% (см. has_financial_data выше)
@@ -374,23 +390,46 @@ class ReportGenerator:
             "capital": self._format_number(capital) if has_financial_data else "Н/Д",
             "profitability": f"{profitability:.1f}%" if has_financial_data else "Н/Д",
             "autonomy_ratio": f"{autonomy_ratio:.1f}%" if has_financial_data else "Н/Д",
+            "current_ratio": f"{current_ratio:.2f}" if current_ratio is not None else "Н/Д",
 
             # Детальные данные баланса (безопасное получение)
             "non_current_assets": self._format_number(get_safe_value(balance, "non_current_assets")),
             "current_assets": self._format_number(get_safe_value(balance, "current_assets")),
             "long_term_liabilities": self._format_number(get_safe_value(balance, "long_term_liabilities")),
             "short_term_liabilities": self._format_number(get_safe_value(balance, "short_term_liabilities")),
+            "inventory": self._format_number(get_safe_value(balance, "inventory")),
+            "receivables": self._format_number(get_safe_value(balance, "receivables")),
+            "cash": self._format_number(get_safe_value(balance, "cash")),
+            "payables": self._format_number(get_safe_value(balance, "payables")),
             "gross_profit": self._format_number(get_safe_value(profit_loss, "gross_profit")),
             "operating_expenses": self._format_number(get_safe_value(profit_loss, "operating_expenses")),
             "net_profit": self._format_number(get_safe_value(profit_loss, "net_profit")),
             "ebitda": self._format_number(get_safe_value(profit_loss, "ebitda")),
+            "interest_receivable": self._format_number(get_safe_value(profit_loss, "interest_receivable")),
+            "other_income": self._format_number(get_safe_value(profit_loss, "other_income")),
+            "other_expenses": self._format_number(get_safe_value(profit_loss, "other_expenses")),
 
-            # Анализ ИИ
-            "analysis_summary": self._render_text(analysis.get("summary", "Анализ не выполнен")),
-            "key_metrics": self._render_text(analysis.get("key_metrics", "")),
-            "risks": self._render_text(analysis.get("risks", "")),
-            "recommendations": self._render_text(analysis.get("recommendations", "")),
-            "dynamics": self._render_text(analysis.get("dynamics", "")),
+            # Движение денежных средств (форма №4) — есть не у всех компаний
+            # (упрощенная отчетность, банки), поэтому отдельный флаг для
+            # шаблона вместо "0" по всем полям
+            "has_cash_flow": bool(cash_flow) and cash_flow.get("operating_flow") not in (None, "Н/Д"),
+            "operating_flow": self._format_number(get_safe_value(cash_flow, "operating_flow")),
+            "investing_flow": self._format_number(get_safe_value(cash_flow, "investing_flow")),
+            "financing_flow": self._format_number(get_safe_value(cash_flow, "financing_flow")),
+            "net_flow": self._format_number(get_safe_value(cash_flow, "net_flow")),
+            "cash_start": self._format_number(get_safe_value(cash_flow, "cash_start")),
+            "cash_end": self._format_number(get_safe_value(cash_flow, "cash_end")),
+
+            # Анализ ИИ. is_offline — реальный вызов IO_NET не удался (недоступен
+            # API, закончился баланс и т.п.), показан шаблонный расчет вместо
+            # содержательного ИИ-анализа — читатель должен это видеть, а не
+            # принимать шаблонный текст за настоящий вывод модели
+            "is_offline_analysis": bool(analysis.get("is_offline")),
+            "analysis_summary": self._render_analysis_block(analysis.get("summary", "Анализ не выполнен")),
+            "key_metrics": self._render_analysis_block(analysis.get("key_metrics", "")),
+            "risks": self._render_analysis_block(analysis.get("risks", "")),
+            "recommendations": self._render_analysis_block(analysis.get("recommendations", "")),
+            "dynamics": self._render_analysis_block(analysis.get("dynamics", "")),
             "risk_level": risk_level,
             "risk_color": risk_color,
             "risk_emoji": risk_emoji,
@@ -430,14 +469,40 @@ class ReportGenerator:
             }, ensure_ascii=False),
         }
 
-    @staticmethod
-    def _render_text(text) -> str:
+    # Короткие предлоги и союзы, после которых по правилам русской
+    # типографики ставится неразрывный пробел — чтобы такое слово не
+    # "повисало" одно в конце строки при переносе
+    _SHORT_WORDS_RE = re.compile(
+        r'\b(а|и|о|у|я|к|с|в|но|же|ли|бы|то|на|по|до|из|за|от|об|со|во|ко|для|что)[ ](?=\S)',
+        re.IGNORECASE
+    )
+
+    # Пробел между группами разрядов большого числа ("67 760 844 000") —
+    # разряд-группа всегда ровно 3 цифры, и после неё либо конец числа,
+    # либо еще один такой же разряд (а не произвольная цифра вроде "2024")
+    _NUMBER_GROUPS_RE = re.compile(r'(?<=\d) (?=\d{3}(?!\d))')
+
+    @classmethod
+    def _prevent_line_orphans(cls, text: str) -> str:
+        """Заменяет обычный пробел после короткого предлога/союза на неразрывный (\\xa0)"""
+        return cls._SHORT_WORDS_RE.sub(lambda m: m.group(1) + "\xa0", text)
+
+    @classmethod
+    def _prevent_number_wrap(cls, text: str) -> str:
+        """Заменяет пробелы между разрядами большого числа на неразрывные — число не переносится посреди себя"""
+        return cls._NUMBER_GROUPS_RE.sub("\xa0", text)
+
+    @classmethod
+    def _render_text(cls, text) -> str:
         """
         Подготовка текста (от ИИ или из данных ФНС) к вставке в HTML:
         экранирует спецсимволы, чтобы сырой текст не превращался в разметку
-        страницы, и конвертирует markdown **жирный** в <strong> — модель
+        страницы, конвертирует markdown **жирный** в <strong> — модель
         систематически форматирует ответы жирным текстом, а Jinja2-шаблон
-        вставляет строку как есть, без интерпретации markdown.
+        вставляет строку как есть, без интерпретации markdown, — и
+        расставляет неразрывные пробелы после коротких предлогов/союзов
+        и между разрядами больших чисел (см. _prevent_line_orphans,
+        _prevent_number_wrap).
         """
         if not text:
             return text
@@ -446,7 +511,26 @@ class ReportGenerator:
                     .replace("<", "&lt;")
                     .replace(">", "&gt;"))
         text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+        text = cls._prevent_line_orphans(text)
+        text = cls._prevent_number_wrap(text)
         return text
+
+    @classmethod
+    def _render_analysis_block(cls, text) -> str:
+        """
+        Текст блока ИИ-анализа (несколько строк — обычная проза или список
+        через "-"), каждая строка — отдельный <p> с "красной строкой" (см.
+        .analysis-text p в шаблоне). Обычный <p> с white-space: pre-line
+        индентирует только самую первую строку блока — остальные пункты
+        списка, идущие через перенос строки внутри того же <p>, отступа не
+        получают. Оборачивая каждую строку в свой <p>, получаем отступ
+        у каждого пункта, а не только у первого.
+        """
+        text = cls._render_text(text)
+        if not text:
+            return text
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        return "".join(f"<p>{line}</p>" for line in lines)
 
     @staticmethod
     def _chart_label(company: Dict[str, Any], max_len: int = 25) -> str:

@@ -35,6 +35,75 @@ COMPARISON_LABELS = {
     "РЕКОМЕНДАЦИЯ": "РЕКОМЕНДАЦИЯ",
 }
 
+# Резервные модели того же бесплатного уровня доступа (min_access_tier: 1),
+# что и основная settings.IONET_MODEL — проверено live-запросом к GET /models
+# 30.08.2026 (см. for_dev/test_API_IONET/models.json), остальные модели
+# площадки требуют платного тарифа (higher_tier_required: true). Пробуются
+# по очереди, если основная модель отвечает 429 "Insufficient credits" —
+# у тарифа Standard (PAYG) дневной лимит бесплатных кредитов на каждую
+# модель считается отдельно, так что соседняя модель может быть еще доступна
+FALLBACK_MODELS = [
+    "zai-org/GLM-4.5-Air",
+    "openai/gpt-oss-20b",
+    "google/gemma-4-26b-a4b-it",
+]
+
+
+class IONetCreditsError(Exception):
+    """Модель ответила 429 — исчерпан дневной лимит бесплатных кредитов именно для нее"""
+
+
+# Строгие JSON-схемы для response_format (guided decoding через vLLM — см.
+# документацию io.net, эндпоинт /chat/completions поддерживает
+# response_format: json_schema). Заменяют более раннее решение — просить
+# модель писать пронумерованные текстовые секции ("1. ФИНАНСОВОЕ
+# СОСТОЯНИЕ", "2. ..." и т.д.) и потом разбирать их регулярками
+# (_parse_sections/_heading_candidate) — эта регэксп-разборка была
+# источником реальных багов (терялась секция, если заголовок и текст были
+# на одной строке). Ключи полей совпадают с тем, что уже ожидает
+# report_generator._prepare_template_context — формат возвращаемого
+# analyze_financial_data/analyze_comparison словаря не меняется, меняется
+# только то, как его содержимое добывается из ответа модели.
+ANALYSIS_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "financial_analysis",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string"},
+                "key_metrics": {"type": "string"},
+                "dynamics": {"type": "string"},
+                "risks": {"type": "string"},
+                "recommendations": {"type": "string"},
+                "risk_level": {"type": "string", "enum": ["Низкий", "Средний", "Высокий"]},
+            },
+            "required": ["summary", "key_metrics", "dynamics", "risks", "recommendations", "risk_level"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+COMPARISON_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "comparison_analysis",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string"},
+                "leader": {"type": "string"},
+                "differences": {"type": "string"},
+                "recommendation": {"type": "string"},
+            },
+            "required": ["summary", "leader", "differences", "recommendation"],
+            "additionalProperties": False,
+        },
+    },
+}
+
 
 class IONETClient:
     """Клиент для API IO_NET"""
@@ -104,7 +173,10 @@ class IONETClient:
             "risks": "Низкая диверсификация источников дохода. Зависимость от экономической ситуации.",
             "recommendations": "1. Увеличить долю собственного капитала\n2. Диверсифицировать источники дохода\n3. Повысить эффективность управления активами",
             "risk_level": risk_level,
-            "full_response": f"Анализ выполнен на основе базовых метрик (режим оффлайн)"
+            "full_response": f"Анализ выполнен на основе базовых метрик (режим оффлайн)",
+            # Реальный вызов IO_NET не удался (см. except в analyze_financial_data) —
+            # флаг для отчета, чтобы читатель не принял шаблонный текст за анализ ИИ
+            "is_offline": True,
         }
 
     @staticmethod
@@ -149,9 +221,14 @@ class IONETClient:
         # нечего: пустые словари выглядели бы для модели как нулевые
         # показатели, и она честно, но ошибочно решала бы, что это "высокий
         # риск" — хотя правильный ответ "данных недостаточно". Не тратим на
-        # это платный запрос к API вообще
-        if not financial_data.get("balance") and not financial_data.get("profit_loss"):
-            logger.info("Нет финансовых данных — анализ не выполняется (API не вызывается)")
+        # это платный запрос к API вообще — если только нет флагов ФНС
+        # (метод check): их одних достаточно для содержательного анализа
+        # даже без бухотчетности (например, "счет заблокирован" по
+        # исключенной из ЕГРЮЛ компании — само по себе весомый вывод)
+        risk_flags = financial_data.get("risk_flags") or {}
+        has_risk_flags = bool(risk_flags.get("positive_text")) or bool(risk_flags.get("negative_text"))
+        if not financial_data.get("balance") and not financial_data.get("profit_loss") and not has_risk_flags:
+            logger.info("Нет финансовых данных и флагов ФНС — анализ не выполняется (API не вызывается)")
             return self._get_no_data_analysis(financial_data)
 
         logger.info("Начало анализа финансовых данных через IO_NET")
@@ -160,8 +237,8 @@ class IONETClient:
             # Подготовка промпта для анализа
             prompt = self._build_analysis_prompt(financial_data)
 
-            # Отправка запроса к IO_NET
-            response = await self._send_request(prompt)
+            # Отправка запроса к IO_NET (с перебором резервных моделей при 429)
+            response = await self._send_request_with_fallback(prompt, response_format=ANALYSIS_RESPONSE_FORMAT)
 
             # Парсинг ответа
             analysis = self._parse_analysis_response(response)
@@ -175,14 +252,23 @@ class IONETClient:
             logger.info("Использован мок-анализ (режим оффлайн)")
             return self._get_mock_analysis(financial_data)
 
-    async def _send_request(self, prompt: str) -> Dict[str, Any]:
+    async def _send_request(
+            self,
+            prompt: str,
+            model: Optional[str] = None,
+            response_format: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """
-        Отправка запроса к IO_NET API
+        Отправка запроса к IO_NET API. model позволяет переопределить модель
+        на конкретный вызов (используется для перебора резервных моделей
+        при 429 — см. _send_request_with_fallback). response_format — строгая
+        JSON-схема ответа (ANALYSIS_RESPONSE_FORMAT/COMPARISON_RESPONSE_FORMAT),
+        без нее модель отвечает свободным текстом
         """
         url = f"{self.base_url}/chat/completions"
 
         payload = {
-            "model": self.model,
+            "model": model or self.model,
             "messages": [
                 {
                     "role": "system",
@@ -198,6 +284,8 @@ class IONETClient:
             "temperature": 0.3,
             "max_tokens": 2000
         }
+        if response_format:
+            payload["response_format"] = response_format
 
         session = await self._get_session()
 
@@ -209,11 +297,41 @@ class IONETClient:
                 else:
                     error_text = await response.text()
                     logger.error(f"Ошибка IO_NET API: {response.status} - {error_text}")
+                    if response.status == 429:
+                        raise IONetCreditsError(f"Исчерпан лимит кредитов для модели {model or self.model}")
                     raise Exception(f"Ошибка API IO_NET: {response.status}")
 
         except asyncio.TimeoutError:
             logger.error("Таймаут при запросе к IO_NET")
             raise TimeoutError("Превышено время ожидания ответа от IO_NET")
+
+    async def _send_request_with_fallback(
+            self,
+            prompt: str,
+            response_format: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Отправляет запрос основной моделью (settings.IONET_MODEL), а при 429
+        (дневной лимit кредитов исчерпан именно для нее) пробует по очереди
+        резервные модели того же бесплатного уровня доступа — FALLBACK_MODELS.
+        Любая другая ошибка (не 429) сразу пробрасывается дальше, без перебора —
+        это, вероятно, не проблема конкретной модели, а сбой API целиком.
+        response_format прокидывается в каждую попытку одинаково.
+        """
+        try:
+            return await self._send_request(prompt, response_format=response_format)
+        except IONetCreditsError as e:
+            logger.warning(f"{e} — пробуем резервные модели")
+
+        for fallback_model in FALLBACK_MODELS:
+            try:
+                response = await self._send_request(prompt, model=fallback_model, response_format=response_format)
+                logger.info(f"Ответ получен от резервной модели {fallback_model}")
+                return response
+            except IONetCreditsError as e:
+                logger.warning(f"{e} — пробуем следующую резервную модель")
+
+        raise IONetCreditsError("Дневной лимит кредитов исчерпан для основной и всех резервных моделей")
 
     def _build_analysis_prompt(self, financial_data: Dict[str, Any]) -> str:
         """
@@ -226,10 +344,60 @@ class IONETClient:
         inn = financial_data.get("inn", "")
         period = financial_data.get("period", "2024")
 
+        # Основной вид деятельности (ОКВЭД, метод ФНС egr) — контекст для
+        # интерпретации показателей: нормальная рентабельность/структура
+        # баланса сильно различается по отраслям (например, у торговли
+        # и у ИТ-компании), без этого модель может делать некорректные
+        # выводы, применяя усредненные ожидания ко всем компаниям одинаково
+        okved = financial_data.get("okved", "")
+        okved_line = f"\nОсновной вид деятельности: {okved}" if okved else ""
+
         balance = financial_data.get("balance", {})
         profit_loss = financial_data.get("profit_loss", {})
+        cash_flow = financial_data.get("cash_flow", {})
         years = financial_data.get("years", {})
         sorted_years = sorted(years.keys())
+
+        # Флаги риска ФНС (метод check) — готовые факты о добросовестности
+        # контрагента (лицензии, массовый адрес, блокировка счета и т.д.),
+        # передаем модели как дополнительный контекст к цифрам отчетности
+        risk_flags = financial_data.get("risk_flags") or {}
+        flags_lines = []
+        if risk_flags.get("positive_text"):
+            flags_lines.append(f"Положительные факторы (данные ФНС): {risk_flags['positive_text']}")
+        if risk_flags.get("negative_text"):
+            flags_lines.append(f"Отрицательные факторы (данные ФНС): {risk_flags['negative_text']}")
+
+        # Сводка по Лицензиям/ДопВидДеят/Филиалам/Участиям/СПВЗ/Истории
+        # (метод ФНС egr, см. FNSClient._summarize_egr_extra) — тоже
+        # дополнительный контекст из реестра, не бухотчетность
+        egr_extra = financial_data.get("egr_extra", "")
+        if egr_extra:
+            flags_lines.append(egr_extra)
+
+        flags_block = "\n".join(flags_lines)
+
+        if not balance and not profit_loss:
+            # Бухотчетности нет вовсе, но есть флаги ФНС (иначе сюда бы не
+            # дошли — см. проверку в analyze_financial_data) — отдельный,
+            # более простой промпт без цифр, которых не существует
+            return f"""
+Проведи предварительную оценку компании {company_name} (ИНН: {inn}) на основе официальных данных ФНС России.{okved_line}
+
+Бухгалтерская отчетность по этой компании в ФНС отсутствует, поэтому анализируй только следующие факторы:
+
+{flags_block}
+
+Ответь в формате JSON со следующими полями:
+- summary: краткая оценка на основе доступных факторов — явно укажи, что бухгалтерская отчетность недоступна
+- key_metrics: укажи, что показатели недоступны — нет бухгалтерской отчетности
+- dynamics: оставь пустой строкой — данных для оценки динамики нет
+- risks: риски на основе перечисленных факторов ФНС
+- recommendations: практические рекомендации
+- risk_level: "Низкий", "Средний" или "Высокий"
+
+Будь объективен. Не выдумывай числовые финансовые показатели, которых нет в данных.
+"""
 
         current_year_block = f"""Подробные данные за последний отчетный год ({period}):
 
@@ -240,13 +408,36 @@ class IONETClient:
 - Собственный капитал: {balance.get('capital', '0')} руб.
 - Долгосрочные обязательства: {balance.get('long_term_liabilities', '0')} руб.
 - Краткосрочные обязательства: {balance.get('short_term_liabilities', '0')} руб.
+- Запасы: {balance.get('inventory', '0')} руб.
+- Дебиторская задолженность: {balance.get('receivables', '0')} руб.
+- Денежные средства: {balance.get('cash', '0')} руб.
+- Кредиторская задолженность: {balance.get('payables', '0')} руб.
 
 Отчет о финансовых результатах:
 - Выручка: {profit_loss.get('revenue', '0')} руб.
 - Валовая прибыль: {profit_loss.get('gross_profit', '0')} руб.
 - Прибыль до налогообложения: {profit_loss.get('profit', '0')} руб.
 - Чистая прибыль: {profit_loss.get('net_profit', '0')} руб.
-- EBITDA: {profit_loss.get('ebitda', '0')} руб."""
+- EBITDA: {profit_loss.get('ebitda', '0')} руб.
+- Проценты к получению: {profit_loss.get('interest_receivable', '0')} руб.
+- Прочие доходы: {profit_loss.get('other_income', '0')} руб.
+- Прочие расходы: {profit_loss.get('other_expenses', '0')} руб."""
+
+        # Форма №4 (движение денежных средств) есть не у всех компаний
+        # (упрощенная отчетность, банки) — добавляем блок в промпт, только
+        # если данные реально есть, а не "Н/Д" по всем полям
+        if cash_flow.get("operating_flow") not in (None, "Н/Д"):
+            current_year_block += f"""
+
+Отчет о движении денежных средств:
+- Сальдо от текущих операций: {cash_flow.get('operating_flow', '0')} руб.
+- Сальдо от инвестиционных операций: {cash_flow.get('investing_flow', '0')} руб.
+- Сальдо от финансовых операций: {cash_flow.get('financing_flow', '0')} руб.
+- Итоговое сальдо за период: {cash_flow.get('net_flow', '0')} руб.
+- Остаток денежных средств на конец периода: {cash_flow.get('cash_end', '0')} руб."""
+
+        if flags_block:
+            current_year_block += f"\n\nДополнительные факторы ФНС (реестры, не бухотчетность):\n{flags_block}"
 
         if len(sorted_years) >= 2:
             year_blocks = []
@@ -263,38 +454,39 @@ class IONETClient:
             years_block = "\n\n".join(year_blocks)
 
             prompt = f"""
-Проведи финансовый анализ компании {company_name} (ИНН: {inn}) на основе отчетности за {len(sorted_years)} года ({sorted_years[0]}-{sorted_years[-1]}):
+Проведи финансовый анализ компании {company_name} (ИНН: {inn}) на основе отчетности за {len(sorted_years)} года ({sorted_years[0]}-{sorted_years[-1]}):{okved_line}
 
 {years_block}
 
 {current_year_block}
 
-Пожалуйста, предоставь анализ в следующем формате:
+Ответь в формате JSON со следующими полями:
+- summary: краткая оценка финансового состояния на текущий момент, с учетом истории за все {len(sorted_years)} года — не только последний год в отрыве от истории
+- key_metrics: рентабельность, ликвидность, финансовая устойчивость на последний год, тоже с учетом истории
+- dynamics: как менялись показатели за {sorted_years[0]}-{sorted_years[-1]} годы — рост, спад или стабильность, с конкретными цифрами
+- risks: выявленные риски и проблемы, включая риски, видимые из динамики и из дополнительных факторов ФНС, если они указаны
+- recommendations: практические рекомендации
+- risk_level: "Низкий", "Средний" или "Высокий" — тоже с учетом тренда за все годы, а не только последнего года в отрыве от истории
 
-1. ФИНАНСОВОЕ СОСТОЯНИЕ (краткая оценка на текущий момент, с учетом истории)
-2. КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ (рентабельность, ликвидность, финансовая устойчивость на последний год)
-3. ДИНАМИКА (как менялись показатели за {sorted_years[0]}-{sorted_years[-1]} годы — рост, спад или стабильность, с конкретными цифрами)
-4. РИСКИ (выявленные риски и проблемы, включая риски, видимые из динамики)
-5. РЕКОМЕНДАЦИИ (практические рекомендации)
-6. УРОВЕНЬ РИСКА (Низкий/Средний/Высокий)
-
-Пункты 1, 2 и 6 должны отражать текущее состояние компании, но с учетом тренда за все {len(sorted_years)} года — не только последний год в отрыве от истории.
+В полях key_metrics и risks не перечисляй построчно каждую цифру из баланса, отчета о финансовых результатах и отчета о движении денежных средств — вместо этого синтезируй содержательные выводы из сочетания нескольких показателей (например, соотношение дебиторской и кредиторской задолженности как признак кассового разрыва, доля запасов в оборотных активах, вклад прочих доходов/расходов в прибыль, расхождение между чистой прибылью и денежным потоком от текущих операций как индикатор качества прибыли). Приводи цифры только там, где они подкрепляют конкретный вывод.
 
 Будь объективен, используй профессиональную терминологию, но объясняй доступно.
 """
         else:
             prompt = f"""
-Проведи финансовый анализ компании {company_name} (ИНН: {inn}) за {period} год.
+Проведи финансовый анализ компании {company_name} (ИНН: {inn}) за {period} год.{okved_line}
 
 {current_year_block}
 
-Пожалуйста, предоставь анализ в следующем формате:
+Ответь в формате JSON со следующими полями:
+- summary: краткая оценка финансового состояния
+- key_metrics: рентабельность, ликвидность, финансовая устойчивость
+- dynamics: оставь пустой строкой — данных за несколько лет нет
+- risks: выявленные риски и проблемы, включая дополнительные факторы ФНС, если они указаны
+- recommendations: практические рекомендации
+- risk_level: "Низкий", "Средний" или "Высокий"
 
-1. ФИНАНСОВОЕ СОСТОЯНИЕ (краткая оценка)
-2. КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ (рентабельность, ликвидность, финансовая устойчивость)
-3. РИСКИ (выявленные риски и проблемы)
-4. РЕКОМЕНДАЦИИ (практические рекомендации)
-5. УРОВЕНЬ РИСКА (Низкий/Средний/Высокий)
+В полях key_metrics и risks не перечисляй построчно каждую цифру из баланса, отчета о финансовых результатах и отчета о движении денежных средств — вместо этого синтезируй содержательные выводы из сочетания нескольких показателей (например, соотношение дебиторской и кредиторской задолженности как признак кассового разрыва, доля запасов в оборотных активах, вклад прочих доходов/расходов в прибыль, расхождение между чистой прибылью и денежным потоком от текущих операций как индикатор качества прибыли). Приводи цифры только там, где они подкрепляют конкретный вывод.
 
 Будь объективен, используй профессиональную терминологию, но объясняй доступно.
 """
@@ -303,16 +495,32 @@ class IONETClient:
 
     def _parse_analysis_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Парсинг ответа от IO_NET
+        Парсинг ответа от IO_NET. Основной путь — строгий JSON по схеме
+        ANALYSIS_RESPONSE_FORMAT (запрошена через response_format в
+        analyze_financial_data), поэтому обычно сводится к json.loads.
+        Отступление на старый построчный разбор секций по заголовкам
+        (_parse_sections) — на случай, если конкретная резервная модель
+        (см. FALLBACK_MODELS) не поддержит guided decoding и все равно
+        ответит свободным текстом вместо JSON.
         """
+        content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+
         try:
-            # Получаем текст ответа
-            content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            data = json.loads(content)
+            return {
+                "summary": data.get("summary") or "Анализ не выполнен",
+                "key_metrics": data.get("key_metrics", ""),
+                "dynamics": data.get("dynamics", ""),
+                "risks": data.get("risks", ""),
+                "recommendations": data.get("recommendations", ""),
+                "risk_level": data.get("risk_level") or self._determine_risk_level(content, {}),
+                "full_response": content
+            }
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            logger.warning("Ответ IO_NET не в ожидаемом JSON-формате — пробуем старый построчный разбор")
 
-            # Разбиваем на секции
+        try:
             sections = self._parse_sections(content, SINGLE_ANALYSIS_LABELS)
-
-            # Определяем уровень риска
             risk_level = self._determine_risk_level(content, sections)
 
             return {
@@ -338,16 +546,23 @@ class IONETClient:
             }
 
     @staticmethod
-    def _heading_candidate(line: str) -> str:
+    def _clean_heading_line(line: str) -> str:
         """
         Снимает markdown-декорации ("**", "###", нумерацию "1.", ":") с начала
         строки, чтобы отличить настоящий заголовок секции от обычного
-        предложения, которое просто упоминает слово вроде "риски" не в начале
+        предложения, которое просто упоминает слово вроде "риски" не в начале.
+        Регистр не меняет — см. _heading_candidate (для сравнения с картой
+        меток) и _parse_sections (где нужен оригинальный регистр остатка
+        строки после заголовка).
         """
         cleaned = re.sub(r'^[#*\s]+', '', line.strip())
         cleaned = re.sub(r'^\d+[.)]\s*', '', cleaned)
-        cleaned = cleaned.strip('*: \t')
-        return cleaned.upper()
+        return cleaned.strip('*: \t')
+
+    @classmethod
+    def _heading_candidate(cls, line: str) -> str:
+        """Верхний регистр _clean_heading_line — для сравнения с картой меток (там все ключи в верхнем регистре)"""
+        return cls._clean_heading_line(line).upper()
 
     def _parse_sections(self, content: str, label_map: Dict[str, str]) -> Dict[str, str]:
         """
@@ -360,6 +575,15 @@ class IONETClient:
         сравниваются от самого длинного к самому короткому, чтобы более
         специфичный ("ФИНАНСОВОЕ СОСТОЯНИЕ") матчился раньше своего же
         префикса ("ФИНАНСОВОЕ"), если оба есть в карте.
+
+        Модель не всегда переносит текст секции на новую строку — иногда
+        пишет "1. **РИСКИ**: <весь текст секции сразу>" одной строкой. Без
+        учета остатка строки после заголовка такой текст терялся бы
+        полностью (вся строка потреблялась как заголовок, а следующая
+        строка уже могла быть заголовком следующей секции — реальный баг,
+        воспроизведен на ответе модели для компании без бухотчетности,
+        где секции "финансовое состояние"/"рекомендации" были однострочными,
+        а "риски" — списком на отдельных строках и потому не терялись).
         """
         variants = sorted(label_map.keys(), key=len, reverse=True)
         sections = {}
@@ -371,13 +595,17 @@ class IONETClient:
             if not line:
                 continue
 
-            heading = self._heading_candidate(line)
+            cleaned = self._clean_heading_line(line)
+            heading = cleaned.upper()
             matched = next((v for v in variants if heading.startswith(v)), None)
             if matched:
                 if current_key and current_content:
                     sections[current_key] = '\n'.join(current_content).strip()
                 current_key = label_map[matched]
                 current_content = []
+                remainder = cleaned[len(matched):].strip('*: \t')
+                if remainder:
+                    current_content.append(remainder)
             elif current_key:
                 current_content.append(line)
 
@@ -473,20 +701,36 @@ class IONETClient:
 
 {companies_block}
 
-Предоставь сравнительный анализ в следующем формате:
-
-1. ОБЩИЙ ВЫВОД (краткое резюме сравнения)
-2. ЛИДЕР (какая компания выглядит финансово сильнее и почему, или отметь, что явного лидера нет)
-3. РАЗЛИЧИЯ И РИСКИ (ключевые различия между компаниями и риски каждой)
-4. РЕКОМЕНДАЦИЯ (практический вывод для того, кто сравнивает эти компании)
+Ответь в формате JSON со следующими полями:
+- summary: краткое резюме сравнения
+- leader: какая компания выглядит финансово сильнее и почему, или отметь, что явного лидера нет
+- differences: ключевые различия между компаниями и риски каждой
+- recommendation: практический вывод для того, кто сравнивает эти компании
 
 Будь объективен, используй профессиональную терминологию, но объясняй доступно.
 """
 
     def _parse_comparison_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
-        """Парсинг ответа ИИ на сравнительный запрос"""
+        """
+        Парсинг ответа ИИ на сравнительный запрос. Основной путь — строгий
+        JSON по схеме COMPARISON_RESPONSE_FORMAT, отступление на старый
+        построчный разбор секций — см. _parse_analysis_response
+        """
+        content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+
         try:
-            content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            data = json.loads(content)
+            return {
+                "summary": data.get("summary") or "Сравнение не выполнено",
+                "leader": data.get("leader", ""),
+                "differences": data.get("differences", ""),
+                "recommendation": data.get("recommendation", ""),
+                "full_response": content,
+            }
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            logger.warning("Ответ IO_NET не в ожидаемом JSON-формате — пробуем старый построчный разбор")
+
+        try:
             sections = self._parse_sections(content, COMPARISON_LABELS)
 
             return {
@@ -514,7 +758,7 @@ class IONETClient:
 
         try:
             prompt = self._build_comparison_prompt(companies)
-            response = await self._send_request(prompt)
+            response = await self._send_request_with_fallback(prompt, response_format=COMPARISON_RESPONSE_FORMAT)
             analysis = self._parse_comparison_response(response)
 
             logger.info("Сравнительный анализ успешно завершен")

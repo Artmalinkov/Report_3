@@ -119,6 +119,8 @@
         .analysis-text p {
             margin: 8px 0;
             white-space: pre-line;
+            text-align: justify;
+            text-indent: 1.5em;
         }
         .chart-grid {
             display: grid;
@@ -183,7 +185,8 @@
             font-size: 10px;
             line-height: 1.5;
             color: #95a5a6;
-            text-align: left;
+            text-align: justify;
+            text-indent: 1.5em;
         }
         @media (max-width: 600px) {
             .container { padding: 20px; }
@@ -211,6 +214,7 @@
                 {% if termination_date %}Дата ликвидации: {{ termination_date }}<br>{% endif %}
                 Уставной капитал: {{ charter_capital }}<br>
                 Численность персонала: {{ staff_count }}<br>
+                Основной вид деятельности: {{ okved }}<br>
                 Отчетный период: {{ period }}<br>
                 Дата формирования отчета: {{ report_date }}
             </div>
@@ -219,6 +223,22 @@
         {% if not has_financial_data %}
         <div class="section" style="background: #fff8e1; border-left: 4px solid #FFC107; padding: 15px 20px; border-radius: 8px; margin-top: -10px;">
             ⚠️ В ФНС отсутствует бухгалтерская отчетность по этой компании — показатели ниже отмечены как "Н/Д" (недоступно), это не означает, что они равны нулю.
+        </div>
+        {% endif %}
+
+        {% if risk_positive_text or risk_negative_text %}
+        <div class="section">
+            <h2>🚩 Флаги ФНС</h2>
+            {% if risk_positive_text %}
+            <div style="background: #e8f5e9; border-left: 4px solid #4CAF50; padding: 12px 18px; border-radius: 8px; margin-bottom: {{ '10px' if risk_negative_text else '0' }};">
+                ✅ {{ risk_positive_text }}
+            </div>
+            {% endif %}
+            {% if risk_negative_text %}
+            <div style="background: #ffebee; border-left: 4px solid #e53935; padding: 12px 18px; border-radius: 8px;">
+                ⚠️ {{ risk_negative_text }}
+            </div>
+            {% endif %}
         </div>
         {% endif %}
 
@@ -249,6 +269,10 @@
                     <div class="label">Автономия</div>
                     <div class="value">{{ autonomy_ratio }}</div>
                 </div>
+                <div class="stat">
+                    <div class="label">Текущая ликвидность</div>
+                    <div class="value">{{ current_ratio }}</div>
+                </div>
             </div>
         </div>
 
@@ -270,6 +294,22 @@
                 <div class="stat">
                     <div class="label">Краткосрочные обязательства</div>
                     <div class="value">{{ short_term_liabilities }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Запасы</div>
+                    <div class="value">{{ inventory }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Дебиторская задолженность</div>
+                    <div class="value">{{ receivables }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Денежные средства</div>
+                    <div class="value">{{ cash }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Кредиторская задолженность</div>
+                    <div class="value">{{ payables }}</div>
                 </div>
             </div>
         </div>
@@ -293,8 +333,52 @@
                     <div class="label">EBITDA</div>
                     <div class="value">{{ ebitda }}</div>
                 </div>
+                <div class="stat">
+                    <div class="label">Проценты к получению</div>
+                    <div class="value">{{ interest_receivable }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Прочие доходы</div>
+                    <div class="value">{{ other_income }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Прочие расходы</div>
+                    <div class="value">{{ other_expenses }}</div>
+                </div>
             </div>
         </div>
+
+        {% if has_cash_flow %}
+        <div class="section">
+            <h2>💵 Движение денежных средств</h2>
+            <div class="grid">
+                <div class="stat">
+                    <div class="label">От текущих операций</div>
+                    <div class="value">{{ operating_flow }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">От инвестиционных операций</div>
+                    <div class="value">{{ investing_flow }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">От финансовых операций</div>
+                    <div class="value">{{ financing_flow }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Итоговое сальдо за период</div>
+                    <div class="value">{{ net_flow }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Остаток на начало периода</div>
+                    <div class="value">{{ cash_start }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Остаток на конец периода</div>
+                    <div class="value">{{ cash_end }}</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         {% if has_years_table %}
         <div class="section">
@@ -354,23 +438,28 @@
 
         <div class="section">
             <h2>🧠 Предварительный анализ</h2>
+            {% if is_offline_analysis %}
+            <div style="background: #fff8e1; border-left: 4px solid #f9a825; padding: 10px 15px; border-radius: 6px; margin-bottom: 15px; font-size: 13px; color: #7f6a00;">
+                ⚠️ ИИ-сервис анализа временно недоступен. Ниже — базовая оценка по формулам, без содержательной интерпретации ИИ.
+            </div>
+            {% endif %}
             <div class="analysis-text">
                 <h3>Финансовое состояние</h3>
-                <p>{{ analysis_summary }}</p>
+                {{ analysis_summary or '<p>Анализ не выполнен</p>' }}
 
                 <h3>Ключевые показатели</h3>
-                <p>{{ key_metrics or 'Нет данных' }}</p>
+                {{ key_metrics or '<p>Нет данных</p>' }}
 
                 {% if dynamics %}
                 <h3>Динамика за последние годы</h3>
-                <p>{{ dynamics }}</p>
+                {{ dynamics }}
                 {% endif %}
 
                 <h3>Выявленные риски</h3>
-                <p>{{ risks or 'Не выявлены' }}</p>
+                {{ risks or '<p>Не выявлены</p>' }}
 
                 <h3>Рекомендации</h3>
-                <p>{{ recommendations or 'Провести дополнительный анализ' }}</p>
+                {{ recommendations or '<p>Провести дополнительный анализ</p>' }}
             </div>
         </div>
 
