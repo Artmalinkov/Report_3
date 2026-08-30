@@ -128,14 +128,17 @@ class FNSClient:
         if self.session and not self.session.closed:
             await self.session.close()
 
-    async def _call(self, method: str, inn: str, **extra_params) -> Any:
+    async def _call(self, method: str, inn: Optional[str] = None, **extra_params) -> Any:
         """
         Низкоуровневый вызов метода api-fns.ru.
         Авторизация — параметром key в query string (не Bearer-заголовком):
-        именно так сервис принимает ключ (см. api-fns.ru/api_help).
+        именно так сервис принимает ключ (см. api-fns.ru/api_help). inn
+        необязателен — методу stat, например, ИНН не нужен вовсе.
         """
         session = await self._get_session()
-        params = {"req": inn, "key": self.api_key, **extra_params}
+        params = {"key": self.api_key, **extra_params}
+        if inn is not None:
+            params["req"] = inn
 
         try:
             async with session.get(f"{self.BASE_URL}/{method}", params=params) as response:
@@ -150,6 +153,16 @@ class FNSClient:
                     raise RuntimeError(f"API ФНС ({method}) вернул не-JSON ответ: {text[:300]}")
         except asyncio.TimeoutError:
             raise TimeoutError(f"Превышено время ожидания ответа от API ФНС ({method})")
+
+    async def get_usage_stats(self) -> Dict[str, Any]:
+        """
+        Метод stat api-fns.ru: лимиты и расход по тарифу за текущий период
+        (ИНН не требуется). Проверено на реальном ответе: возвращает
+        {"ДатаНач", "ДатаОконч", "Методы": {method: {"Лимит", "ТипЛимита",
+        "Истрачено"}}}. Метод не входит в список "Методы" собственного
+        ответа (не тратит сам себя).
+        """
+        return await self._call("stat")
 
     async def get_financial_report(self, inn: str) -> Dict[str, Any]:
         """
