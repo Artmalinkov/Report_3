@@ -97,7 +97,7 @@ async def run_test(test_name: str = None):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Запуск тестов Report_v_4")
+    parser = argparse.ArgumentParser(description="Запуск тестов Deep Finance Report")
     parser.add_argument(
         "--test",
         type=str,

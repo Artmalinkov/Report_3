@@ -20,7 +20,7 @@ from app.database.crud import user_crud, report_crud, cache_crud
 
 _DASHBOARD_DIR = Path(__file__).parent
 
-app = FastAPI(title="Report_v_4 Dashboard", docs_url=None, redoc_url=None)
+app = FastAPI(title="Deep Finance Report Dashboard", docs_url=None, redoc_url=None)
 app.add_middleware(SessionMiddleware, secret_key=settings.DASHBOARD_SECRET_KEY)
 app.mount("/static", StaticFiles(directory=str(_DASHBOARD_DIR / "static")), name="static")
 

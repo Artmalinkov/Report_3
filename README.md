@@ -1,4 +1,4 @@
-# 📊 Report_v_4 — Финансовый анализ компаний через Telegram
+# 📊 Deep Finance Report — Финансовый анализ компаний через Telegram
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![Aiogram](https://img.shields.io/badge/Aiogram-3.x-green.svg)](https://docs.aiogram.dev/)

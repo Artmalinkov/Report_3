@@ -42,7 +42,7 @@ async def main():
         serialize=is_json,
     )
 
-    logger.info("🚀 Запуск Report_v_4 бота...")
+    logger.info("🚀 Запуск Deep Finance Report бота...")
     logger.info(f"📊 Режим: {'DEBUG' if settings.DEBUG else 'PRODUCTION'}")
 
     try:
