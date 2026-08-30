@@ -231,6 +231,14 @@ class IONETClient:
         inn = financial_data.get("inn", "")
         period = financial_data.get("period", "2024")
 
+        # Основной вид деятельности (ОКВЭД, метод ФНС egr) — контекст для
+        # интерпретации показателей: нормальная рентабельность/структура
+        # баланса сильно различается по отраслям (например, у торговли
+        # и у ИТ-компании), без этого модель может делать некорректные
+        # выводы, применяя усредненные ожидания ко всем компаниям одинаково
+        okved = financial_data.get("okved", "")
+        okved_line = f"\nОсновной вид деятельности: {okved}" if okved else ""
+
         balance = financial_data.get("balance", {})
         profit_loss = financial_data.get("profit_loss", {})
         years = financial_data.get("years", {})
@@ -252,7 +260,7 @@ class IONETClient:
             # дошли — см. проверку в analyze_financial_data) — отдельный,
             # более простой промпт без цифр, которых не существует
             return f"""
-Проведи предварительную оценку компании {company_name} (ИНН: {inn}) на основе официальных данных ФНС России.
+Проведи предварительную оценку компании {company_name} (ИНН: {inn}) на основе официальных данных ФНС России.{okved_line}
 
 Бухгалтерская отчетность по этой компании в ФНС отсутствует, поэтому анализируй только следующие факторы:
 
@@ -304,7 +312,7 @@ class IONETClient:
             years_block = "\n\n".join(year_blocks)
 
             prompt = f"""
-Проведи финансовый анализ компании {company_name} (ИНН: {inn}) на основе отчетности за {len(sorted_years)} года ({sorted_years[0]}-{sorted_years[-1]}):
+Проведи финансовый анализ компании {company_name} (ИНН: {inn}) на основе отчетности за {len(sorted_years)} года ({sorted_years[0]}-{sorted_years[-1]}):{okved_line}
 
 {years_block}
 
@@ -325,7 +333,7 @@ class IONETClient:
 """
         else:
             prompt = f"""
-Проведи финансовый анализ компании {company_name} (ИНН: {inn}) за {period} год.
+Проведи финансовый анализ компании {company_name} (ИНН: {inn}) за {period} год.{okved_line}
 
 {current_year_block}
 

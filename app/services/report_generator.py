@@ -363,6 +363,7 @@ class ReportGenerator:
                 if financial_data.get("charter_capital") else "Н/Д"
             ),
             "staff_count": financial_data.get("staff_count") or "Н/Д",
+            "okved": self._render_text(financial_data.get("okved", "")) or "Н/Д",
             "legal_address": self._render_text(financial_data.get("legal_address", "")),
             "has_financial_data": has_financial_data,
 

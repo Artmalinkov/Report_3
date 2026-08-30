@@ -12,6 +12,8 @@ MOCK_COMPANIES = {
         "registration_date": "1991-06-20",
         "charter_capital": "67760844000",
         "staff_count": "",
+        # Реальный ответ egr.ОснВидДеят (проверен live-запросом 30.08.2026)
+        "okved": "64.19 — Денежное посредничество прочее",
         # Реальный ответ метода check (проверен live-запросом 30.08.2026)
         "risk_flags": {
             "positive_text": "Есть лицензии (15 шт.); Есть филиалы (88 шт.); Уставный капитал 67760844 тыс. руб.",
@@ -76,6 +78,7 @@ MOCK_COMPANIES = {
         "termination_date": "2025-11-03",
         "charter_capital": "1000000",
         "staff_count": "42",
+        "okved": "62.01 — Разработка компьютерного программного обеспечения",  # тестовые данные, не проверено live
         "address": "г. Москва, ул. Тестовая, д. 1",
         "period": "2024",
         "balance": {
@@ -111,6 +114,8 @@ MOCK_COMPANIES = {
         "termination_date": "2025-03-14",
         "charter_capital": "10000",
         "staff_count": "",
+        # Реальный ответ egr.ОснВидДеят (проверен live-запросом 30.08.2026)
+        "okved": "68.32 — Управление недвижимым имуществом за вознаграждение или на договорной основе",
         # Реальный ответ метода check (проверен live-запросом 30.08.2026)
         "risk_flags": {
             "positive_text": "",
@@ -161,6 +166,7 @@ def get_mock_financial_data(inn: str):
             "termination_date": company.get("termination_date", ""),
             "charter_capital": company.get("charter_capital", ""),
             "staff_count": company.get("staff_count", ""),
+            "okved": company.get("okved", ""),
             "risk_flags": company.get("risk_flags", {"positive_text": "", "negative_text": ""}),
             "legal_address": company["address"],
             "updated_at": "2026-07-26T18:00:00",

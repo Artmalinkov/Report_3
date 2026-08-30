@@ -167,6 +167,7 @@ class FNSClient:
             "termination_date": company_info["termination_date"],
             "charter_capital": company_info["charter_capital"],
             "staff_count": staff_count,
+            "okved": company_info["okved"],
             "legal_address": company_info["address"],
             "updated_at": datetime.utcnow().isoformat(),
             # {год: {"balance": ..., "profit_loss": ...}} за последние (до)
@@ -190,6 +191,21 @@ class FNSClient:
             return None
 
         entry = items[0]
+
+        def _format_okved(block: Dict[str, Any]) -> str:
+            """
+            Основной вид деятельности (ОКВЭД) — проверено на реальных
+            данных для ЮЛ (Сбербанк: "64.19 — Денежное посредничество
+            прочее") и для ИП (Мингараев: "13.92 — Производство готовых
+            текстильных изделий, кроме одежды"), структура ОснВидДеят
+            одинакова для обоих типов
+            """
+            osn = block.get("ОснВидДеят") or {}
+            code = osn.get("Код", "")
+            text = osn.get("Текст", "")
+            if code and text:
+                return f"{code} — {text}"
+            return code or text
 
         if "ЮЛ" in entry:
             ul = entry["ЮЛ"]
@@ -221,6 +237,7 @@ class FNSClient:
                 # компании его раскрывают, либо название неточное. .get() —
                 # если поля нет, строка просто не покажется в отчете
                 "staff_count": (ul.get("ОткрСведения") or {}).get("КолРаб", ""),
+                "okved": _format_okved(ul),
                 "address": (ul.get("Адрес") or {}).get("АдресПолн", ""),
             }
 
@@ -232,6 +249,7 @@ class FNSClient:
                 # У ИП нет уставного капитала как правовой категории
                 "charter_capital": "",
                 "staff_count": (ip.get("ОткрСведения") or {}).get("КолРаб", ""),
+                "okved": _format_okved(ip),
                 "ogrn": ip.get("ОГРНИП", ""),
                 "status": ip.get("Статус", "Неизвестно"),
                 "registration_date": ip.get("ДатаРег", ""),
