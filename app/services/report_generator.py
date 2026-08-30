@@ -420,7 +420,11 @@ class ReportGenerator:
             "cash_start": self._format_number(get_safe_value(cash_flow, "cash_start")),
             "cash_end": self._format_number(get_safe_value(cash_flow, "cash_end")),
 
-            # Анализ ИИ
+            # Анализ ИИ. is_offline — реальный вызов IO_NET не удался (недоступен
+            # API, закончился баланс и т.п.), показан шаблонный расчет вместо
+            # содержательного ИИ-анализа — читатель должен это видеть, а не
+            # принимать шаблонный текст за настоящий вывод модели
+            "is_offline_analysis": bool(analysis.get("is_offline")),
             "analysis_summary": self._render_analysis_block(analysis.get("summary", "Анализ не выполнен")),
             "key_metrics": self._render_analysis_block(analysis.get("key_metrics", "")),
             "risks": self._render_analysis_block(analysis.get("risks", "")),

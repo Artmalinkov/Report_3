@@ -438,6 +438,11 @@
 
         <div class="section">
             <h2>🧠 Предварительный анализ</h2>
+            {% if is_offline_analysis %}
+            <div style="background: #fff8e1; border-left: 4px solid #f9a825; padding: 10px 15px; border-radius: 6px; margin-bottom: 15px; font-size: 13px; color: #7f6a00;">
+                ⚠️ ИИ-сервис анализа временно недоступен. Ниже — базовая оценка по формулам, без содержательной интерпретации ИИ.
+            </div>
+            {% endif %}
             <div class="analysis-text">
                 <h3>Финансовое состояние</h3>
                 {{ analysis_summary or '<p>Анализ не выполнен</p>' }}
