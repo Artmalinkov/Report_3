@@ -168,6 +168,7 @@ class FNSClient:
             "charter_capital": company_info["charter_capital"],
             "staff_count": staff_count,
             "okved": company_info["okved"],
+            "egr_extra": company_info["egr_extra"],
             "legal_address": company_info["address"],
             "updated_at": datetime.utcnow().isoformat(),
             # {год: {"balance": ..., "profit_loss": ...}} за последние (до)
@@ -180,6 +181,60 @@ class FNSClient:
 
         logger.info(f"Данные для ИНН {inn} получены: {result['company_name']}")
         return result
+
+    @staticmethod
+    def _summarize_egr_extra(block: Dict[str, Any]) -> str:
+        """
+        Сжатая сводка по Лицензиям/ДопВидДеят/Филиалам/Участиям/СПВЗ/Истории
+        из egr — для промпта ИИ-анализа, не для отображения в отчете (см.
+        ROADMAP). Эти блоки могут быть огромными (у Сбербанка, например,
+        341 запись СПВЗ и 88 филиалов) — целиком в промпт не поместится и
+        не нужно, модели достаточно сводки и нескольких свежих событий.
+        Работает одинаково для ЮЛ и ИП (передаем блок целиком) — просто
+        для ИП большинство списков обычно пустые, .get() это переживает
+        без ошибок.
+        """
+        lines = []
+
+        licenses = block.get("Лицензии") or []
+        if licenses:
+            types = sorted({l.get("ВидДеятельности", "") for l in licenses if l.get("ВидДеятельности")})
+            preview = "; ".join(types[:3])
+            if len(types) > 3:
+                preview += f" и еще {len(types) - 3}"
+            lines.append(f"Лицензии: {len(licenses)} шт. ({preview})")
+
+        extra_okved = block.get("ДопВидДеят") or []
+        if extra_okved:
+            texts = [f"{d.get('Код', '')} — {d.get('Текст', '')}" for d in extra_okved if d.get("Текст")]
+            if texts:
+                lines.append("Дополнительные виды деятельности: " + "; ".join(texts))
+
+        branches = block.get("Филиалы") or []
+        if branches:
+            lines.append(f"Филиалы: {len(branches)} шт.")
+
+        participations = block.get("Участия") or []
+        if participations:
+            names = [p.get("НаимСокрЮЛ", "") for p in participations if p.get("НаимСокрЮЛ")][:3]
+            preview = "; ".join(names)
+            if len(participations) > len(names):
+                preview += f" и еще {len(participations) - len(names)}"
+            lines.append(f"Участие в других организациях: {len(participations)} шт. ({preview})")
+
+        spvz = block.get("СПВЗ") or []
+        if spvz:
+            recent = sorted(spvz, key=lambda x: x.get("Дата", ""), reverse=True)[:3]
+            recent_text = "; ".join(f"{r.get('Дата', '')}: {r.get('Текст', '')}" for r in recent)
+            lines.append(f"Регистрационные действия: {len(spvz)} записей за все время, последние — {recent_text}")
+
+        history = block.get("История") or {}
+        if history:
+            parts = [f"{key}: {len(sub)} изм." for key, sub in history.items() if isinstance(sub, (dict, list))]
+            if parts:
+                lines.append("История изменений сведений: " + ", ".join(parts))
+
+        return "\n".join(lines)
 
     async def _get_company_info(self, inn: str) -> Optional[Dict[str, Any]]:
         """
@@ -238,6 +293,10 @@ class FNSClient:
                 # если поля нет, строка просто не покажется в отчете
                 "staff_count": (ul.get("ОткрСведения") or {}).get("КолРаб", ""),
                 "okved": _format_okved(ul),
+                # Сжатая сводка Лицензии/ДопВидДеят/Филиалы/Участия/СПВЗ/
+                # История — только для промпта ИИ, в отчете не показываем
+                # (см. ROADMAP: возможен отдельный раздел "справка о компании")
+                "egr_extra": self._summarize_egr_extra(ul),
                 "address": (ul.get("Адрес") or {}).get("АдресПолн", ""),
             }
 
@@ -250,6 +309,7 @@ class FNSClient:
                 "charter_capital": "",
                 "staff_count": (ip.get("ОткрСведения") or {}).get("КолРаб", ""),
                 "okved": _format_okved(ip),
+                "egr_extra": self._summarize_egr_extra(ip),
                 "ogrn": ip.get("ОГРНИП", ""),
                 "status": ip.get("Статус", "Неизвестно"),
                 "registration_date": ip.get("ДатаРег", ""),

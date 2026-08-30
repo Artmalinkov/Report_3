@@ -253,6 +253,14 @@ class IONETClient:
             flags_lines.append(f"Положительные факторы (данные ФНС): {risk_flags['positive_text']}")
         if risk_flags.get("negative_text"):
             flags_lines.append(f"Отрицательные факторы (данные ФНС): {risk_flags['negative_text']}")
+
+        # Сводка по Лицензиям/ДопВидДеят/Филиалам/Участиям/СПВЗ/Истории
+        # (метод ФНС egr, см. FNSClient._summarize_egr_extra) — тоже
+        # дополнительный контекст из реестра, не бухотчетность
+        egr_extra = financial_data.get("egr_extra", "")
+        if egr_extra:
+            flags_lines.append(egr_extra)
+
         flags_block = "\n".join(flags_lines)
 
         if not balance and not profit_loss:
