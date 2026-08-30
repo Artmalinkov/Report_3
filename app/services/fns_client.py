@@ -196,14 +196,13 @@ class FNSClient:
             "egr_extra": company_info["egr_extra"],
             # Полный список доп. видов деятельности (код + текст) — для
             # отображения в справке о компании, в отличие от egr_extra
-            # (сжатая сводка для промпта ИИ) и extra_okved_count (только число)
+            # (сжатая сводка для промпта ИИ)
             "extra_okved": company_info["extra_okved"],
             "legal_address": company_info["address"],
             # Голые счетчики для краткой справки о компании в отчете (см.
-            # _egr_counts) — сколько лицензий/филиалов/доп.видов деятельности/
-            # участий у компании, без текстовой детализации
+            # _egr_counts) — сколько лицензий/филиалов/участий у компании,
+            # без текстовой детализации
             "licenses_count": company_info["licenses_count"],
-            "extra_okved_count": company_info["extra_okved_count"],
             "branches_count": company_info["branches_count"],
             "participations_count": company_info["participations_count"],
             "updated_at": datetime.utcnow().isoformat(),
@@ -275,13 +274,14 @@ class FNSClient:
     @staticmethod
     def _egr_counts(block: Dict[str, Any]) -> Dict[str, int]:
         """
-        Голые счетчики Лицензий/ДопВидДеят/Филиалов/Участий из egr — для
-        краткой справки о компании в самом отчете (в отличие от
-        _summarize_egr_extra, которая дает текстовую сводку для промпта ИИ)
+        Голые счетчики Лицензий/Филиалов/Участий из egr — для краткой
+        справки о компании в самом отчете (в отличие от _summarize_egr_extra,
+        которая дает текстовую сводку для промпта ИИ). Доп. виды деятельности
+        сюда не входят — они и так раскрыты полностью текстом (см.
+        _format_extra_okved), отдельный счетчик для них избыточен
         """
         return {
             "licenses_count": len(block.get("Лицензии") or []),
-            "extra_okved_count": len(block.get("ДопВидДеят") or []),
             "branches_count": len(block.get("Филиалы") or []),
             "participations_count": len(block.get("Участия") or []),
         }

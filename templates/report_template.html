@@ -234,7 +234,7 @@
                 Основной вид деятельности: {{ okved }}{% if extra_okved %}<br>
                 Дополнительные виды деятельности: {{ extra_okved }}{% endif %}
             </div>
-            {% if licenses_count or branches_count or extra_okved_count or participations_count %}
+            {% if licenses_count or branches_count or participations_count %}
             <div class="grid" style="margin-top: 15px;">
                 {% if licenses_count %}
                 <div class="stat">
@@ -246,12 +246,6 @@
                 <div class="stat">
                     <div class="label">Филиалы</div>
                     <div class="value">{{ branches_count }}</div>
-                </div>
-                {% endif %}
-                {% if extra_okved_count %}
-                <div class="stat">
-                    <div class="label">Доп. виды деятельности</div>
-                    <div class="value">{{ extra_okved_count }}</div>
                 </div>
                 {% endif %}
                 {% if participations_count %}

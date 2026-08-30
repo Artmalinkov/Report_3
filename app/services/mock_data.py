@@ -41,10 +41,8 @@ MOCK_COMPANIES = {
             "Учредители: 1 изм., Лицензии: 14 изм."
         ),
         # Голые счетчики для краткой справки о компании — соответствуют
-        # egr_extra выше (15 лицензий, 2 доп. вида деятельности, 88 филиалов,
-        # 36 участий)
+        # egr_extra выше (15 лицензий, 88 филиалов, 36 участий)
         "licenses_count": 15,
-        "extra_okved_count": 2,
         "branches_count": 88,
         "participations_count": 36,
         # Полный список доп. видов деятельности (совпадает с egr_extra выше)
@@ -224,7 +222,6 @@ def get_mock_financial_data(inn: str):
             "okved": company.get("okved", ""),
             "egr_extra": company.get("egr_extra", ""),
             "licenses_count": company.get("licenses_count", 0),
-            "extra_okved_count": company.get("extra_okved_count", 0),
             "extra_okved": company.get("extra_okved", ""),
             "branches_count": company.get("branches_count", 0),
             "participations_count": company.get("participations_count", 0),

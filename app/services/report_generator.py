@@ -382,11 +382,12 @@ class ReportGenerator:
             "legal_address": self._render_text(financial_data.get("legal_address", "")) or "Н/Д",
             "has_financial_data": has_financial_data,
 
-            # Счетчики Лицензий/Филиалов/ДопВидДеят/Участий (метод ФНС egr,
-            # см. FNSClient._egr_counts) — компактная справка о компании,
-            # 0 просто не показывается в шаблоне (см. {% if %})
+            # Счетчики Лицензий/Филиалов/Участий (метод ФНС egr, см.
+            # FNSClient._egr_counts) — компактная справка о компании, 0
+            # просто не показывается в шаблоне (см. {% if %}). Для доп.
+            # видов деятельности отдельного счетчика нет — они и так
+            # раскрыты полностью текстом (поле extra_okved)
             "licenses_count": financial_data.get("licenses_count") or 0,
-            "extra_okved_count": financial_data.get("extra_okved_count") or 0,
             "branches_count": financial_data.get("branches_count") or 0,
             "participations_count": financial_data.get("participations_count") or 0,
 
