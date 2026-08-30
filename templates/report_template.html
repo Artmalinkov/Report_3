@@ -348,6 +348,38 @@
             </div>
         </div>
 
+        {% if has_cash_flow %}
+        <div class="section">
+            <h2>💵 Движение денежных средств</h2>
+            <div class="grid">
+                <div class="stat">
+                    <div class="label">От текущих операций</div>
+                    <div class="value">{{ operating_flow }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">От инвестиционных операций</div>
+                    <div class="value">{{ investing_flow }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">От финансовых операций</div>
+                    <div class="value">{{ financing_flow }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Итоговое сальдо за период</div>
+                    <div class="value">{{ net_flow }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Остаток на начало периода</div>
+                    <div class="value">{{ cash_start }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Остаток на конец периода</div>
+                    <div class="value">{{ cash_end }}</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         {% if has_years_table %}
         <div class="section">
             <h2>📅 Динамика по годам</h2>

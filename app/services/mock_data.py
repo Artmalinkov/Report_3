@@ -71,7 +71,15 @@ MOCK_COMPANIES = {
             "interest_receivable": "300000000",
             "other_income": "450000000",
             "other_expenses": "600000000",
-        }
+        },
+        "cash_flow": {
+            "operating_flow": "2000000000",
+            "investing_flow": "-800000000",
+            "financing_flow": "-700000000",
+            "net_flow": "500000000",
+            "cash_start": "8500000000",
+            "cash_end": "9000000000",
+        },
     },
     "7702070139": {
         "name": "ПАО Газпром",
@@ -194,6 +202,7 @@ def get_mock_financial_data(inn: str):
             "period": company["period"],
             "balance": company["balance"],
             "profit_loss": company["profit_loss"],
+            "cash_flow": company.get("cash_flow", {}),
             "status": company["status"],
             "registration_date": company["registration_date"],
             "termination_date": company.get("termination_date", ""),

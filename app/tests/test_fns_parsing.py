@@ -35,9 +35,11 @@ def test_parse_standard_form_maps_official_codes():
         "2110": "544581317", "2120": "420807670", "2100": "123773647",
         "2210": "29002583", "2220": "48206206",
         "2300": "-12254963", "2400": "-11681168",
+        "4100": "-59544981", "4200": "326463", "4300": "62998222",
+        "4400": "3779704", "4450": "6356100", "4500": "10046936",
     }
 
-    balance, profit_loss = FNSClient._parse_standard_form(year_data)
+    balance, profit_loss, cash_flow = FNSClient._parse_standard_form(year_data)
 
     # Значения переведены из тысяч в рубли (умножены на 1000)
     assert balance["non_current_assets"] == "197597977000"
@@ -51,12 +53,20 @@ def test_parse_standard_form_maps_official_codes():
     assert int(profit_loss["operating_expenses"]) == (420807670 + 29002583 + 48206206) * 1000
     assert profit_loss["ebitda"] == "Н/Д"
 
+    # Форма №4 (движение денежных средств) — переведена в рубли как и
+    # остальные формы; сходится 4100+4200+4300=4400, 4450+4400=4500
+    assert cash_flow["operating_flow"] == "-59544981000"
+    assert cash_flow["net_flow"] == "3779704000"
+    assert cash_flow["cash_end"] == "10046936000"
+
 
 def test_parse_standard_form_missing_codes_default_to_zero():
     """Отсутствующие в ответе коды считаются нулем, а не падают с ошибкой"""
-    balance, profit_loss = FNSClient._parse_standard_form({})
+    balance, profit_loss, cash_flow = FNSClient._parse_standard_form({})
     assert balance["assets"] == "0"
     assert profit_loss["revenue"] == "0"
+    # Формы №4 без кода "4100" вообще нет в ответе — честно "Н/Д", а не 0
+    assert cash_flow["operating_flow"] == "Н/Д"
 
 
 def test_parse_credit_form_maps_bank_codes():
@@ -75,7 +85,7 @@ def test_parse_credit_form_maps_bank_codes():
         },
     }
 
-    balance, profit_loss = FNSClient._parse_credit_form(year_data)
+    balance, profit_loss, cash_flow = FNSClient._parse_credit_form(year_data)
 
     assert balance["assets"] == "32979678372000"
     assert balance["capital"] == "4724662201000"
@@ -88,12 +98,17 @@ def test_parse_credit_form_maps_bank_codes():
     assert profit_loss["net_profit"] == "709891879000"
     assert profit_loss["gross_profit"] == "Н/Д"
 
+    # Банковская форма движения денежных средств (credit_cash_flow) пока
+    # не подключена — честно "Н/Д", а не угаданные нули
+    assert cash_flow["net_flow"] == "Н/Д"
+
 
 def test_parse_credit_form_missing_fields_are_not_available():
     """Если банковских кодов вообще нет в ответе — все поля "Н/Д", не 0"""
-    balance, profit_loss = FNSClient._parse_credit_form({})
+    balance, profit_loss, cash_flow = FNSClient._parse_credit_form({})
     assert balance["assets"] == "Н/Д"
     assert profit_loss["net_profit"] == "Н/Д"
+    assert cash_flow["operating_flow"] == "Н/Д"
 
 
 def test_credit_schema_detection():
@@ -119,7 +134,7 @@ async def test_get_financial_data_handles_empty_list_response():
     with patch.object(client, "_call", new=AsyncMock(return_value=[])):
         result = await client._get_financial_data("732190597507")
 
-    assert result == {"period": "", "balance": {}, "profit_loss": {}}
+    assert result == {"period": "", "balance": {}, "profit_loss": {}, "cash_flow": {}}
 
 
 if __name__ == "__main__":

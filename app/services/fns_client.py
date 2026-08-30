@@ -45,6 +45,20 @@ PROFIT_LOSS_CODES = {
     "other_expenses": "2350",  # прочие расходы
 }
 
+# Форма №4 "Отчет о движении денежных средств" (Приказ Минфина №66н) —
+# только сальдо по видам деятельности и остатки денежных средств, без
+# построчной детализации (~30 кодов 4100-4500) — проверено арифметически
+# на реальном ответе (ИНН 7736207543, 2024 год): 4100+4200+4300 = 4400,
+# 4450+4400+4490 = 4500
+CASH_FLOW_CODES = {
+    "operating_flow": "4100",  # сальдо от текущих (операционных) операций
+    "investing_flow": "4200",  # сальдо от инвестиционных операций
+    "financing_flow": "4300",  # сальдо от финансовых операций
+    "net_flow": "4400",  # итоговое сальдо денежных потоков за период
+    "cash_start": "4450",  # остаток денежных средств на начало периода
+    "cash_end": "4500",  # остаток денежных средств на конец периода
+}
+
 # Коды форм 0409806 "Бухгалтерский баланс (публикуемая форма)" и 0409807
 # "Отчет о финансовых результатах" для кредитных организаций (банков).
 # У api-fns.ru эти показатели, в отличие от обычных компаний, сгруппированы
@@ -172,6 +186,7 @@ class FNSClient:
             "period": financial.get("period", ""),
             "balance": financial.get("balance", {}),
             "profit_loss": financial.get("profit_loss", {}),
+            "cash_flow": financial.get("cash_flow", {}),
             "status": company_info["status"],
             "registration_date": company_info["registration_date"],
             "termination_date": company_info["termination_date"],
@@ -379,7 +394,7 @@ class FNSClient:
         ИП такую отчетность, как правило, не сдают (работают по декларациям) —
         для них метод вернет пустой результат, это ожидаемое поведение.
         """
-        empty = {"period": "", "balance": {}, "profit_loss": {}}
+        empty = {"period": "", "balance": {}, "profit_loss": {}, "cash_flow": {}}
 
         try:
             data = await self._call("bo", inn)
@@ -412,21 +427,22 @@ class FNSClient:
 
         years: Dict[str, Dict[str, Any]] = {}
         for year in recent_years:
-            balance, profit_loss = parse(company_block[year])
-            years[year] = {"balance": balance, "profit_loss": profit_loss}
+            balance, profit_loss, cash_flow = parse(company_block[year])
+            years[year] = {"balance": balance, "profit_loss": profit_loss, "cash_flow": cash_flow}
 
         return {
             "period": latest_year,
             "balance": years[latest_year]["balance"],
             "profit_loss": years[latest_year]["profit_loss"],
+            "cash_flow": years[latest_year]["cash_flow"],
             # Данные за последние (до) 3 года, от старого к новому, для
             # отчета с разбивкой по годам и AI-анализа динамики
             "years": years,
         }
 
     @staticmethod
-    def _parse_standard_form(year_data: Dict[str, Any]) -> tuple[Dict[str, str], Dict[str, str]]:
-        """Формы №1 и №2 (Приказ Минфина №66н) — обычные компании"""
+    def _parse_standard_form(year_data: Dict[str, Any]) -> tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
+        """Формы №1, №2 и №4 (Приказ Минфина №66н) — обычные компании"""
 
         def get(code: str) -> str:
             return _thousands_to_rubles(str(year_data.get(code, "0")))
@@ -443,10 +459,20 @@ class FNSClient:
         # отсутствующий показатель угаданным числом
         profit_loss["ebitda"] = NOT_AVAILABLE
 
-        return balance, profit_loss
+        # Форма №4 есть не у всех компаний (упрощенная отчетность может ее
+        # не включать) — код "4100" как индикатор наличия, чтобы не
+        # показывать в отчете строку из одних нулей
+        has_cash_flow_form = "4100" in year_data
+        cash_flow = (
+            {key: get(code) for key, code in CASH_FLOW_CODES.items()}
+            if has_cash_flow_form
+            else {key: NOT_AVAILABLE for key in CASH_FLOW_CODES}
+        )
+
+        return balance, profit_loss, cash_flow
 
     @staticmethod
-    def _parse_credit_form(year_data: Dict[str, Any]) -> tuple[Dict[str, str], Dict[str, str]]:
+    def _parse_credit_form(year_data: Dict[str, Any]) -> tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
         """Формы 0409806/0409807 — кредитные организации (банки)"""
 
         def get(section_code: tuple[str, str]) -> Optional[str]:
@@ -479,5 +505,9 @@ class FNSClient:
             "operating_expenses": NOT_AVAILABLE,
             "ebitda": NOT_AVAILABLE,
         }
+        # У банков движение денежных средств — форма credit_cash_flow с
+        # другой структурой строк (задача "Банковская форма" в дорожной
+        # карте), сюда пока не подключена
+        cash_flow = {key: NOT_AVAILABLE for key in CASH_FLOW_CODES}
 
-        return balance, profit_loss
+        return balance, profit_loss, cash_flow

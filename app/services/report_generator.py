@@ -247,6 +247,7 @@ class ReportGenerator:
         """Подготовка данных для шаблона"""
         balance = financial_data.get("balance", {})
         profit_loss = financial_data.get("profit_loss", {})
+        cash_flow = financial_data.get("cash_flow", {})
         # У части компаний (особенно новых или сдающих отчетность не по
         # общей системе) ФНС просто не располагает бухотчетностью вообще —
         # balance/profit_loss приходят полностью пустыми. Раньше это молча
@@ -407,6 +408,17 @@ class ReportGenerator:
             "interest_receivable": self._format_number(get_safe_value(profit_loss, "interest_receivable")),
             "other_income": self._format_number(get_safe_value(profit_loss, "other_income")),
             "other_expenses": self._format_number(get_safe_value(profit_loss, "other_expenses")),
+
+            # Движение денежных средств (форма №4) — есть не у всех компаний
+            # (упрощенная отчетность, банки), поэтому отдельный флаг для
+            # шаблона вместо "0" по всем полям
+            "has_cash_flow": bool(cash_flow) and cash_flow.get("operating_flow") not in (None, "Н/Д"),
+            "operating_flow": self._format_number(get_safe_value(cash_flow, "operating_flow")),
+            "investing_flow": self._format_number(get_safe_value(cash_flow, "investing_flow")),
+            "financing_flow": self._format_number(get_safe_value(cash_flow, "financing_flow")),
+            "net_flow": self._format_number(get_safe_value(cash_flow, "net_flow")),
+            "cash_start": self._format_number(get_safe_value(cash_flow, "cash_start")),
+            "cash_end": self._format_number(get_safe_value(cash_flow, "cash_end")),
 
             # Анализ ИИ
             "analysis_summary": self._render_analysis_block(analysis.get("summary", "Анализ не выполнен")),
