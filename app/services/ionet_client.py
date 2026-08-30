@@ -35,6 +35,23 @@ COMPARISON_LABELS = {
     "РЕКОМЕНДАЦИЯ": "РЕКОМЕНДАЦИЯ",
 }
 
+# Резервные модели того же бесплатного уровня доступа (min_access_tier: 1),
+# что и основная settings.IONET_MODEL — проверено live-запросом к GET /models
+# 30.08.2026 (см. for_dev/test_API_IONET/models.json), остальные модели
+# площадки требуют платного тарифа (higher_tier_required: true). Пробуются
+# по очереди, если основная модель отвечает 429 "Insufficient credits" —
+# у тарифа Standard (PAYG) дневной лимит бесплатных кредитов на каждую
+# модель считается отдельно, так что соседняя модель может быть еще доступна
+FALLBACK_MODELS = [
+    "zai-org/GLM-4.5-Air",
+    "openai/gpt-oss-20b",
+    "google/gemma-4-26b-a4b-it",
+]
+
+
+class IONetCreditsError(Exception):
+    """Модель ответила 429 — исчерпан дневной лимит бесплатных кредитов именно для нее"""
+
 
 class IONETClient:
     """Клиент для API IO_NET"""
@@ -168,8 +185,8 @@ class IONETClient:
             # Подготовка промпта для анализа
             prompt = self._build_analysis_prompt(financial_data)
 
-            # Отправка запроса к IO_NET
-            response = await self._send_request(prompt)
+            # Отправка запроса к IO_NET (с перебором резервных моделей при 429)
+            response = await self._send_request_with_fallback(prompt)
 
             # Парсинг ответа
             analysis = self._parse_analysis_response(response)
@@ -183,14 +200,16 @@ class IONETClient:
             logger.info("Использован мок-анализ (режим оффлайн)")
             return self._get_mock_analysis(financial_data)
 
-    async def _send_request(self, prompt: str) -> Dict[str, Any]:
+    async def _send_request(self, prompt: str, model: Optional[str] = None) -> Dict[str, Any]:
         """
-        Отправка запроса к IO_NET API
+        Отправка запроса к IO_NET API. model позволяет переопределить модель
+        на конкретный вызов (используется для перебора резервных моделей
+        при 429 — см. _send_request_with_fallback)
         """
         url = f"{self.base_url}/chat/completions"
 
         payload = {
-            "model": self.model,
+            "model": model or self.model,
             "messages": [
                 {
                     "role": "system",
@@ -217,11 +236,36 @@ class IONETClient:
                 else:
                     error_text = await response.text()
                     logger.error(f"Ошибка IO_NET API: {response.status} - {error_text}")
+                    if response.status == 429:
+                        raise IONetCreditsError(f"Исчерпан лимит кредитов для модели {model or self.model}")
                     raise Exception(f"Ошибка API IO_NET: {response.status}")
 
         except asyncio.TimeoutError:
             logger.error("Таймаут при запросе к IO_NET")
             raise TimeoutError("Превышено время ожидания ответа от IO_NET")
+
+    async def _send_request_with_fallback(self, prompt: str) -> Dict[str, Any]:
+        """
+        Отправляет запрос основной моделью (settings.IONET_MODEL), а при 429
+        (дневной лимit кредитов исчерпан именно для нее) пробует по очереди
+        резервные модели того же бесплатного уровня доступа — FALLBACK_MODELS.
+        Любая другая ошибка (не 429) сразу пробрасывается дальше, без перебора —
+        это, вероятно, не проблема конкретной модели, а сбой API целиком.
+        """
+        try:
+            return await self._send_request(prompt)
+        except IONetCreditsError as e:
+            logger.warning(f"{e} — пробуем резервные модели")
+
+        for fallback_model in FALLBACK_MODELS:
+            try:
+                response = await self._send_request(prompt, model=fallback_model)
+                logger.info(f"Ответ получен от резервной модели {fallback_model}")
+                return response
+            except IONetCreditsError as e:
+                logger.warning(f"{e} — пробуем следующую резервную модель")
+
+        raise IONetCreditsError("Дневной лимит кредитов исчерпан для основной и всех резервных моделей")
 
     def _build_analysis_prompt(self, financial_data: Dict[str, Any]) -> str:
         """
@@ -619,7 +663,7 @@ class IONETClient:
 
         try:
             prompt = self._build_comparison_prompt(companies)
-            response = await self._send_request(prompt)
+            response = await self._send_request_with_fallback(prompt)
             analysis = self._parse_comparison_response(response)
 
             logger.info("Сравнительный анализ успешно завершен")
