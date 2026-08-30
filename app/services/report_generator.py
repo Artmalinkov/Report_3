@@ -275,6 +275,16 @@ class ReportGenerator:
         # Коэффициент автономии
         autonomy_ratio = (capital / assets * 100) if assets > 0 else 0
 
+        # Коэффициент текущей ликвидности (оборотные активы / краткосрочные
+        # обязательства) — считаем сами, а не полагаемся на ИИ, чтобы
+        # значение всегда было точным и не зависело от качества генерации
+        current_assets_val = self._safe_float(get_safe_value(balance, "current_assets", "0"))
+        short_term_liabilities_val = self._safe_float(get_safe_value(balance, "short_term_liabilities", "0"))
+        current_ratio = (
+            current_assets_val / short_term_liabilities_val
+            if short_term_liabilities_val > 0 else None
+        )
+
         risk_level = analysis.get("risk_level", "Средний")
         risk_color = {
             "Низкий": "#4CAF50",
@@ -379,16 +389,24 @@ class ReportGenerator:
             "capital": self._format_number(capital) if has_financial_data else "Н/Д",
             "profitability": f"{profitability:.1f}%" if has_financial_data else "Н/Д",
             "autonomy_ratio": f"{autonomy_ratio:.1f}%" if has_financial_data else "Н/Д",
+            "current_ratio": f"{current_ratio:.2f}" if current_ratio is not None else "Н/Д",
 
             # Детальные данные баланса (безопасное получение)
             "non_current_assets": self._format_number(get_safe_value(balance, "non_current_assets")),
             "current_assets": self._format_number(get_safe_value(balance, "current_assets")),
             "long_term_liabilities": self._format_number(get_safe_value(balance, "long_term_liabilities")),
             "short_term_liabilities": self._format_number(get_safe_value(balance, "short_term_liabilities")),
+            "inventory": self._format_number(get_safe_value(balance, "inventory")),
+            "receivables": self._format_number(get_safe_value(balance, "receivables")),
+            "cash": self._format_number(get_safe_value(balance, "cash")),
+            "payables": self._format_number(get_safe_value(balance, "payables")),
             "gross_profit": self._format_number(get_safe_value(profit_loss, "gross_profit")),
             "operating_expenses": self._format_number(get_safe_value(profit_loss, "operating_expenses")),
             "net_profit": self._format_number(get_safe_value(profit_loss, "net_profit")),
             "ebitda": self._format_number(get_safe_value(profit_loss, "ebitda")),
+            "interest_receivable": self._format_number(get_safe_value(profit_loss, "interest_receivable")),
+            "other_income": self._format_number(get_safe_value(profit_loss, "other_income")),
+            "other_expenses": self._format_number(get_safe_value(profit_loss, "other_expenses")),
 
             # Анализ ИИ
             "analysis_summary": self._render_analysis_block(analysis.get("summary", "Анализ не выполнен")),

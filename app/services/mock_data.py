@@ -55,6 +55,10 @@ MOCK_COMPANIES = {
             "current_assets": "20000000000",
             "long_term_liabilities": "18000000000",
             "short_term_liabilities": "12000000000",
+            "inventory": "1000000000",
+            "receivables": "6000000000",
+            "cash": "9000000000",
+            "payables": "5000000000",
         },
         "profit_loss": {
             "revenue": "12000000000",
@@ -64,6 +68,9 @@ MOCK_COMPANIES = {
             "operating_expenses": "1500000000",
             "net_profit": "2800000000",
             "ebitda": "4200000000",
+            "interest_receivable": "300000000",
+            "other_income": "450000000",
+            "other_expenses": "600000000",
         }
     },
     "7702070139": {

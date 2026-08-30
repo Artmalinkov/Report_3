@@ -269,6 +269,10 @@
                     <div class="label">Автономия</div>
                     <div class="value">{{ autonomy_ratio }}</div>
                 </div>
+                <div class="stat">
+                    <div class="label">Текущая ликвидность</div>
+                    <div class="value">{{ current_ratio }}</div>
+                </div>
             </div>
         </div>
 
@@ -291,6 +295,22 @@
                     <div class="label">Краткосрочные обязательства</div>
                     <div class="value">{{ short_term_liabilities }}</div>
                 </div>
+                <div class="stat">
+                    <div class="label">Запасы</div>
+                    <div class="value">{{ inventory }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Дебиторская задолженность</div>
+                    <div class="value">{{ receivables }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Денежные средства</div>
+                    <div class="value">{{ cash }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Кредиторская задолженность</div>
+                    <div class="value">{{ payables }}</div>
+                </div>
             </div>
         </div>
 
@@ -312,6 +332,18 @@
                 <div class="stat">
                     <div class="label">EBITDA</div>
                     <div class="value">{{ ebitda }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Проценты к получению</div>
+                    <div class="value">{{ interest_receivable }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Прочие доходы</div>
+                    <div class="value">{{ other_income }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Прочие расходы</div>
+                    <div class="value">{{ other_expenses }}</div>
                 </div>
             </div>
         </div>
