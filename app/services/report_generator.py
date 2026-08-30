@@ -390,11 +390,11 @@ class ReportGenerator:
             "ebitda": self._format_number(get_safe_value(profit_loss, "ebitda")),
 
             # Анализ ИИ
-            "analysis_summary": self._render_text(analysis.get("summary", "Анализ не выполнен")),
-            "key_metrics": self._render_text(analysis.get("key_metrics", "")),
-            "risks": self._render_text(analysis.get("risks", "")),
-            "recommendations": self._render_text(analysis.get("recommendations", "")),
-            "dynamics": self._render_text(analysis.get("dynamics", "")),
+            "analysis_summary": self._render_analysis_block(analysis.get("summary", "Анализ не выполнен")),
+            "key_metrics": self._render_analysis_block(analysis.get("key_metrics", "")),
+            "risks": self._render_analysis_block(analysis.get("risks", "")),
+            "recommendations": self._render_analysis_block(analysis.get("recommendations", "")),
+            "dynamics": self._render_analysis_block(analysis.get("dynamics", "")),
             "risk_level": risk_level,
             "risk_color": risk_color,
             "risk_emoji": risk_emoji,
@@ -467,6 +467,23 @@ class ReportGenerator:
         text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
         text = cls._prevent_line_orphans(text)
         return text
+
+    @classmethod
+    def _render_analysis_block(cls, text) -> str:
+        """
+        Текст блока ИИ-анализа (несколько строк — обычная проза или список
+        через "-"), каждая строка — отдельный <p> с "красной строкой" (см.
+        .analysis-text p в шаблоне). Обычный <p> с white-space: pre-line
+        индентирует только самую первую строку блока — остальные пункты
+        списка, идущие через перенос строки внутри того же <p>, отступа не
+        получают. Оборачивая каждую строку в свой <p>, получаем отступ
+        у каждого пункта, а не только у первого.
+        """
+        text = cls._render_text(text)
+        if not text:
+            return text
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        return "".join(f"<p>{line}</p>" for line in lines)
 
     @staticmethod
     def _chart_label(company: Dict[str, Any], max_len: int = 25) -> str:

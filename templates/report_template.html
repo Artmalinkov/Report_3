@@ -374,21 +374,21 @@
             <h2>🧠 Предварительный анализ</h2>
             <div class="analysis-text">
                 <h3>Финансовое состояние</h3>
-                <p>{{ analysis_summary }}</p>
+                {{ analysis_summary or '<p>Анализ не выполнен</p>' }}
 
                 <h3>Ключевые показатели</h3>
-                <p>{{ key_metrics or 'Нет данных' }}</p>
+                {{ key_metrics or '<p>Нет данных</p>' }}
 
                 {% if dynamics %}
                 <h3>Динамика за последние годы</h3>
-                <p>{{ dynamics }}</p>
+                {{ dynamics }}
                 {% endif %}
 
                 <h3>Выявленные риски</h3>
-                <p>{{ risks or 'Не выявлены' }}</p>
+                {{ risks or '<p>Не выявлены</p>' }}
 
                 <h3>Рекомендации</h3>
-                <p>{{ recommendations or 'Провести дополнительный анализ' }}</p>
+                {{ recommendations or '<p>Провести дополнительный анализ</p>' }}
             </div>
         </div>
 
