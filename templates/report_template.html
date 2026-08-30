@@ -50,7 +50,7 @@
             color: #7f8c8d;
             margin-top: 2px;
         }
-        .header .meta-details {
+        .meta-details {
             text-align: left;
             color: #7f8c8d;
             font-size: 14px;
@@ -208,16 +208,50 @@
             {% else %}
             <div class="risk-badge" style="background-color: #7f8c8d;">⚪ Нет данных для оценки</div>
             {% endif %}
+            <div class="meta" style="margin-top: 10px;">
+                Отчетный период: {{ period }} · Дата формирования отчета: {{ report_date }}
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📋 Справка о компании</h2>
             <div class="meta-details">
+                Юридический адрес: {{ legal_address }}<br>
                 Дата регистрации: {{ registration_date }}<br>
                 Статус: {{ status }}<br>
                 {% if termination_date %}Дата ликвидации: {{ termination_date }}<br>{% endif %}
                 Уставной капитал: {{ charter_capital }}<br>
                 Численность персонала: {{ staff_count }}<br>
-                Основной вид деятельности: {{ okved }}<br>
-                Отчетный период: {{ period }}<br>
-                Дата формирования отчета: {{ report_date }}
+                Основной вид деятельности: {{ okved }}
             </div>
+            {% if licenses_count or branches_count or extra_okved_count or participations_count %}
+            <div class="grid" style="margin-top: 15px;">
+                {% if licenses_count %}
+                <div class="stat">
+                    <div class="label">Лицензии</div>
+                    <div class="value">{{ licenses_count }}</div>
+                </div>
+                {% endif %}
+                {% if branches_count %}
+                <div class="stat">
+                    <div class="label">Филиалы</div>
+                    <div class="value">{{ branches_count }}</div>
+                </div>
+                {% endif %}
+                {% if extra_okved_count %}
+                <div class="stat">
+                    <div class="label">Доп. виды деятельности</div>
+                    <div class="value">{{ extra_okved_count }}</div>
+                </div>
+                {% endif %}
+                {% if participations_count %}
+                <div class="stat">
+                    <div class="label">Участие в организациях</div>
+                    <div class="value">{{ participations_count }}</div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
 
         {% if not has_financial_data %}

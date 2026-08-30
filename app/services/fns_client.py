@@ -195,6 +195,13 @@ class FNSClient:
             "okved": company_info["okved"],
             "egr_extra": company_info["egr_extra"],
             "legal_address": company_info["address"],
+            # Голые счетчики для краткой справки о компании в отчете (см.
+            # _egr_counts) — сколько лицензий/филиалов/доп.видов деятельности/
+            # участий у компании, без текстовой детализации
+            "licenses_count": company_info["licenses_count"],
+            "extra_okved_count": company_info["extra_okved_count"],
+            "branches_count": company_info["branches_count"],
+            "participations_count": company_info["participations_count"],
             "updated_at": datetime.utcnow().isoformat(),
             # {год: {"balance": ..., "profit_loss": ...}} за последние (до)
             # 3 года, от старого к новому; для ИП или при недоступности
@@ -261,6 +268,20 @@ class FNSClient:
 
         return "\n".join(lines)
 
+    @staticmethod
+    def _egr_counts(block: Dict[str, Any]) -> Dict[str, int]:
+        """
+        Голые счетчики Лицензий/ДопВидДеят/Филиалов/Участий из egr — для
+        краткой справки о компании в самом отчете (в отличие от
+        _summarize_egr_extra, которая дает текстовую сводку для промпта ИИ)
+        """
+        return {
+            "licenses_count": len(block.get("Лицензии") or []),
+            "extra_okved_count": len(block.get("ДопВидДеят") or []),
+            "branches_count": len(block.get("Филиалы") or []),
+            "participations_count": len(block.get("Участия") or []),
+        }
+
     async def _get_company_info(self, inn: str) -> Optional[Dict[str, Any]]:
         """
         Реквизиты компании/ИП по данным ЕГРЮЛ/ЕГРИП (метод egr)
@@ -323,6 +344,7 @@ class FNSClient:
                 # (см. ROADMAP: возможен отдельный раздел "справка о компании")
                 "egr_extra": self._summarize_egr_extra(ul),
                 "address": (ul.get("Адрес") or {}).get("АдресПолн", ""),
+                **self._egr_counts(ul),
             }
 
         if "ИП" in entry:
@@ -340,6 +362,7 @@ class FNSClient:
                 "registration_date": ip.get("ДатаРег", ""),
                 "termination_date": ip.get("ДатаПрекр", ""),  # см. пояснение выше для ЮЛ
                 "address": (ip.get("Адрес") or {}).get("АдресПолн", ""),
+                **self._egr_counts(ip),
             }
 
         return None

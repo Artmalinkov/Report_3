@@ -375,8 +375,16 @@ class ReportGenerator:
             ),
             "staff_count": financial_data.get("staff_count") or "Н/Д",
             "okved": self._render_text(financial_data.get("okved", "")) or "Н/Д",
-            "legal_address": self._render_text(financial_data.get("legal_address", "")),
+            "legal_address": self._render_text(financial_data.get("legal_address", "")) or "Н/Д",
             "has_financial_data": has_financial_data,
+
+            # Счетчики Лицензий/Филиалов/ДопВидДеят/Участий (метод ФНС egr,
+            # см. FNSClient._egr_counts) — компактная справка о компании,
+            # 0 просто не показывается в шаблоне (см. {% if %})
+            "licenses_count": financial_data.get("licenses_count") or 0,
+            "extra_okved_count": financial_data.get("extra_okved_count") or 0,
+            "branches_count": financial_data.get("branches_count") or 0,
+            "participations_count": financial_data.get("participations_count") or 0,
 
             # Флаги риска ФНС (метод check) — готовый текст, только экранируем
             "risk_positive_text": self._render_text(financial_data.get("risk_flags", {}).get("positive_text", "")),
