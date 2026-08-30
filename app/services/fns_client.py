@@ -194,7 +194,17 @@ class FNSClient:
             "staff_count": staff_count,
             "okved": company_info["okved"],
             "egr_extra": company_info["egr_extra"],
+            # Полный список доп. видов деятельности (код + текст) — для
+            # отображения в справке о компании, в отличие от egr_extra
+            # (сжатая сводка для промпта ИИ)
+            "extra_okved": company_info["extra_okved"],
             "legal_address": company_info["address"],
+            # Голые счетчики для краткой справки о компании в отчете (см.
+            # _egr_counts) — сколько лицензий/филиалов/участий у компании,
+            # без текстовой детализации
+            "licenses_count": company_info["licenses_count"],
+            "branches_count": company_info["branches_count"],
+            "participations_count": company_info["participations_count"],
             "updated_at": datetime.utcnow().isoformat(),
             # {год: {"balance": ..., "profit_loss": ...}} за последние (до)
             # 3 года, от старого к новому; для ИП или при недоступности
@@ -261,6 +271,33 @@ class FNSClient:
 
         return "\n".join(lines)
 
+    @staticmethod
+    def _egr_counts(block: Dict[str, Any]) -> Dict[str, int]:
+        """
+        Голые счетчики Лицензий/Филиалов/Участий из egr — для краткой
+        справки о компании в самом отчете (в отличие от _summarize_egr_extra,
+        которая дает текстовую сводку для промпта ИИ). Доп. виды деятельности
+        сюда не входят — они и так раскрыты полностью текстом (см.
+        _format_extra_okved), отдельный счетчик для них избыточен
+        """
+        return {
+            "licenses_count": len(block.get("Лицензии") or []),
+            "branches_count": len(block.get("Филиалы") or []),
+            "participations_count": len(block.get("Участия") or []),
+        }
+
+    @staticmethod
+    def _format_extra_okved(block: Dict[str, Any]) -> str:
+        """
+        Полный список дополнительных видов деятельности (код + текст) —
+        для отображения в справке о компании человеку, в отличие от
+        _egr_counts (только количество) и _summarize_egr_extra (только
+        для промпта ИИ)
+        """
+        extra_okved = block.get("ДопВидДеят") or []
+        parts = [f"{d.get('Код', '')} — {d.get('Текст', '')}" for d in extra_okved if d.get("Текст")]
+        return "; ".join(parts)
+
     async def _get_company_info(self, inn: str) -> Optional[Dict[str, Any]]:
         """
         Реквизиты компании/ИП по данным ЕГРЮЛ/ЕГРИП (метод egr)
@@ -322,7 +359,9 @@ class FNSClient:
                 # История — только для промпта ИИ, в отчете не показываем
                 # (см. ROADMAP: возможен отдельный раздел "справка о компании")
                 "egr_extra": self._summarize_egr_extra(ul),
+                "extra_okved": self._format_extra_okved(ul),
                 "address": (ul.get("Адрес") or {}).get("АдресПолн", ""),
+                **self._egr_counts(ul),
             }
 
         if "ИП" in entry:
@@ -335,11 +374,13 @@ class FNSClient:
                 "staff_count": (ip.get("ОткрСведения") or {}).get("КолРаб", ""),
                 "okved": _format_okved(ip),
                 "egr_extra": self._summarize_egr_extra(ip),
+                "extra_okved": self._format_extra_okved(ip),
                 "ogrn": ip.get("ОГРНИП", ""),
                 "status": ip.get("Статус", "Неизвестно"),
                 "registration_date": ip.get("ДатаРег", ""),
                 "termination_date": ip.get("ДатаПрекр", ""),  # см. пояснение выше для ЮЛ
                 "address": (ip.get("Адрес") or {}).get("АдресПолн", ""),
+                **self._egr_counts(ip),
             }
 
         return None

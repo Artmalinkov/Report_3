@@ -359,6 +359,8 @@ class ReportGenerator:
             [zero_if_none(v) for v in trend_revenue + trend_net_profit]
         )
 
+        status_display = self._format_status(financial_data.get("status", ""))
+
         return {
             "company_name": self._render_text(financial_data.get("company_name", "Неизвестно")),
             "short_name": self._render_text(financial_data.get("short_name", "")),
@@ -366,7 +368,8 @@ class ReportGenerator:
             "ogrn": financial_data.get("ogrn", ""),
             "period": self.format_period_range(financial_data),
             "report_date": datetime.now().strftime("%d.%m.%Y %H:%M"),
-            "status": self._render_text(self._format_status(financial_data.get("status", ""))),
+            "status": self._render_text(status_display),
+            "status_color": self._status_color(status_display),
             "registration_date": self._format_date(financial_data.get("registration_date", "")),
             "termination_date": self._format_date(financial_data.get("termination_date", "")) if financial_data.get("termination_date") else "",
             "charter_capital": (
@@ -375,8 +378,18 @@ class ReportGenerator:
             ),
             "staff_count": financial_data.get("staff_count") or "Н/Д",
             "okved": self._render_text(financial_data.get("okved", "")) or "Н/Д",
-            "legal_address": self._render_text(financial_data.get("legal_address", "")),
+            "extra_okved": self._render_text(financial_data.get("extra_okved", "")),
+            "legal_address": self._render_text(financial_data.get("legal_address", "")) or "Н/Д",
             "has_financial_data": has_financial_data,
+
+            # Счетчики Лицензий/Филиалов/Участий (метод ФНС egr, см.
+            # FNSClient._egr_counts) — компактная справка о компании, 0
+            # просто не показывается в шаблоне (см. {% if %}). Для доп.
+            # видов деятельности отдельного счетчика нет — они и так
+            # раскрыты полностью текстом (поле extra_okved)
+            "licenses_count": financial_data.get("licenses_count") or 0,
+            "branches_count": financial_data.get("branches_count") or 0,
+            "participations_count": financial_data.get("participations_count") or 0,
 
             # Флаги риска ФНС (метод check) — готовый текст, только экранируем
             "risk_positive_text": self._render_text(financial_data.get("risk_flags", {}).get("positive_text", "")),
@@ -664,6 +677,20 @@ class ReportGenerator:
         if raw_status.strip().lower() == "действующее":
             return "Действующая"
         return raw_status
+
+    @staticmethod
+    def _status_color(status: str) -> str:
+        """
+        Цвет фона под статусом в справке о компании: действующая — зеленый,
+        ликвидированная (в т.ч. "Ликвидировано по 129-ФЗ") — красный, любой
+        другой статус (в процессе ликвидации, реорганизация, Н/Д и т.п.) —
+        желтый
+        """
+        if status == "Действующая":
+            return "#4CAF50"
+        if "ликвидир" in status.lower():
+            return "#F44336"
+        return "#FFC107"
 
     def _create_default_template(self) -> str:
         """

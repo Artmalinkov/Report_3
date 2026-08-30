@@ -50,7 +50,7 @@
             color: #7f8c8d;
             margin-top: 2px;
         }
-        .header .meta-details {
+        .meta-details {
             text-align: left;
             color: #7f8c8d;
             font-size: 14px;
@@ -65,6 +65,14 @@
             color: white;
             background-color: {{ risk_color }};
             margin: 5px 0;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-weight: bold;
+            color: white;
+            background-color: {{ status_color }};
         }
         .section {
             margin: 30px 0;
@@ -208,16 +216,46 @@
             {% else %}
             <div class="risk-badge" style="background-color: #7f8c8d;">⚪ Нет данных для оценки</div>
             {% endif %}
+            <div class="meta" style="margin-top: 10px;">
+                Отчетный период: {{ period }} · Дата формирования отчета: {{ report_date }}
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📋 Справка о компании</h2>
             <div class="meta-details">
+                ИНН: {{ inn }} | ОГРН: {{ ogrn }}<br>
                 Дата регистрации: {{ registration_date }}<br>
-                Статус: {{ status }}<br>
+                Юридический адрес: {{ legal_address }}<br>
+                Статус: <span class="status-badge">{{ status }}</span><br>
                 {% if termination_date %}Дата ликвидации: {{ termination_date }}<br>{% endif %}
                 Уставной капитал: {{ charter_capital }}<br>
                 Численность персонала: {{ staff_count }}<br>
-                Основной вид деятельности: {{ okved }}<br>
-                Отчетный период: {{ period }}<br>
-                Дата формирования отчета: {{ report_date }}
+                Основной вид деятельности: {{ okved }}{% if extra_okved %}<br>
+                Дополнительные виды деятельности: {{ extra_okved }}{% endif %}
             </div>
+            {% if licenses_count or branches_count or participations_count %}
+            <div class="grid" style="margin-top: 15px;">
+                {% if licenses_count %}
+                <div class="stat">
+                    <div class="label">Лицензии</div>
+                    <div class="value">{{ licenses_count }}</div>
+                </div>
+                {% endif %}
+                {% if branches_count %}
+                <div class="stat">
+                    <div class="label">Филиалы</div>
+                    <div class="value">{{ branches_count }}</div>
+                </div>
+                {% endif %}
+                {% if participations_count %}
+                <div class="stat">
+                    <div class="label">Участие в организациях</div>
+                    <div class="value">{{ participations_count }}</div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
 
         {% if not has_financial_data %}

@@ -40,6 +40,17 @@ MOCK_COMPANIES = {
             "Адрес: 19 изм., ДержРеестрАО: 1 изм., Участия: 330 изм., "
             "Учредители: 1 изм., Лицензии: 14 изм."
         ),
+        # Голые счетчики для краткой справки о компании — соответствуют
+        # egr_extra выше (15 лицензий, 88 филиалов, 36 участий)
+        "licenses_count": 15,
+        "branches_count": 88,
+        "participations_count": 36,
+        # Полный список доп. видов деятельности (совпадает с egr_extra выше)
+        "extra_okved": (
+            "62.09 — Деятельность, связанная с использованием вычислительной "
+            "техники и информационных технологий, прочая; "
+            "64.19 — Денежное посредничество прочее"
+        ),
         # Реальный ответ метода check (проверен live-запросом 30.08.2026)
         "risk_flags": {
             "positive_text": "Есть лицензии (15 шт.); Есть филиалы (88 шт.); Уставный капитал 67760844 тыс. руб.",
@@ -210,6 +221,10 @@ def get_mock_financial_data(inn: str):
             "staff_count": company.get("staff_count", ""),
             "okved": company.get("okved", ""),
             "egr_extra": company.get("egr_extra", ""),
+            "licenses_count": company.get("licenses_count", 0),
+            "extra_okved": company.get("extra_okved", ""),
+            "branches_count": company.get("branches_count", 0),
+            "participations_count": company.get("participations_count", 0),
             "risk_flags": company.get("risk_flags", {"positive_text": "", "negative_text": ""}),
             "legal_address": company["address"],
             "updated_at": "2026-07-26T18:00:00",
