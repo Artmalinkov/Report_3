@@ -145,6 +145,14 @@ class FNSClient:
             raise ValueError(f"Компания с ИНН {inn} не найдена в ФНС")
 
         financial = await self._get_financial_data(inn)
+        risk_flags = await self._get_risk_flags(inn)
+
+        staff_count = company_info["staff_count"]
+        if not staff_count and risk_flags.get("staff_count"):
+            # ССЧР (среднесписочная численность) внутри check.Позитив.РеестрМСП
+            # оказалась более надежным источником, чем ОткрСведения.КолРаб —
+            # см. комментарий в _get_company_info про непроверенность последнего
+            staff_count = risk_flags["staff_count"]
 
         result = {
             "inn": inn,
@@ -158,13 +166,15 @@ class FNSClient:
             "registration_date": company_info["registration_date"],
             "termination_date": company_info["termination_date"],
             "charter_capital": company_info["charter_capital"],
-            "staff_count": company_info["staff_count"],
+            "staff_count": staff_count,
             "legal_address": company_info["address"],
             "updated_at": datetime.utcnow().isoformat(),
             # {год: {"balance": ..., "profit_loss": ...}} за последние (до)
             # 3 года, от старого к новому; для ИП или при недоступности
             # отчетности — пустой словарь
             "years": financial.get("years", {}),
+            # Флаги риска ФНС (метод check) — см. _get_risk_flags
+            "risk_flags": risk_flags,
         }
 
         logger.info(f"Данные для ИНН {inn} получены: {result['company_name']}")
@@ -230,6 +240,49 @@ class FNSClient:
             }
 
         return None
+
+    async def _get_risk_flags(self, inn: str) -> Dict[str, Any]:
+        """
+        Флаги риска ФНС (метод check) — готовые признаки добросовестности/
+        неблагонадежности контрагента. Проверено на 4 реальных примерах
+        (крупный банк, ликвидированная компания, малое предприятие, ИП):
+        Позитив: Лицензии, Филиалы, КапБолее50тыс, РеестрМСП{...}, ПоддержкаМСП[...]
+        Негатив: РеестрМассАдрес, МассАдрес, Статус, ИсклИзРеестраМСП,
+        НедостоверАдрес, БлокСчета, РискНалогПроверки. Оба блока всегда
+        содержат готовый текст в "Текст" — используем как есть, без
+        собственного форматирования отдельных флагов.
+
+        check — не критичный для отчета источник: при ошибке отчет должен
+        собраться и без него, поэтому исключение наружу не пробрасываем.
+        """
+        empty = {"positive_text": "", "negative_text": "", "positive": {}, "negative": {}, "staff_count": ""}
+        try:
+            data = await self._call("check", inn)
+        except Exception as e:
+            logger.warning(f"Не удалось получить флаги ФНС (check) для {inn}: {e}")
+            return empty
+
+        items = data.get("items") or []
+        if not items:
+            return empty
+
+        entry = items[0]
+        block = entry.get("ЮЛ") or entry.get("ИП") or {}
+        positive = block.get("Позитив") or {}
+        negative = block.get("Негатив") or {}
+
+        # ССЧР (среднесписочная численность) лежит внутри Позитив.РеестрМСП —
+        # более надежный источник staff_count, чем ОткрСведения.КолРаб (см.
+        # комментарий в _get_company_info)
+        staff_count = (positive.get("РеестрМСП") or {}).get("ССЧР", "")
+
+        return {
+            "positive_text": positive.get("Текст", ""),
+            "negative_text": negative.get("Текст", ""),
+            "positive": positive,
+            "negative": negative,
+            "staff_count": staff_count,
+        }
 
     async def _get_financial_data(self, inn: str) -> Dict[str, Any]:
         """

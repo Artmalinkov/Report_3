@@ -366,6 +366,10 @@ class ReportGenerator:
             "legal_address": self._render_text(financial_data.get("legal_address", "")),
             "has_financial_data": has_financial_data,
 
+            # Флаги риска ФНС (метод check) — готовый текст, только экранируем
+            "risk_positive_text": self._render_text(financial_data.get("risk_flags", {}).get("positive_text", "")),
+            "risk_negative_text": self._render_text(financial_data.get("risk_flags", {}).get("negative_text", "")),
+
             # Финансовые показатели (форматированные). Без данных — честное
             # "Н/Д", а не 0 руб. и 0.0% (см. has_financial_data выше)
             "revenue": self._format_number(revenue) if has_financial_data else "Н/Д",

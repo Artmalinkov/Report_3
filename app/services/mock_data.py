@@ -12,6 +12,11 @@ MOCK_COMPANIES = {
         "registration_date": "1991-06-20",
         "charter_capital": "67760844000",
         "staff_count": "",
+        # Реальный ответ метода check (проверен live-запросом 30.08.2026)
+        "risk_flags": {
+            "positive_text": "Есть лицензии (15 шт.); Есть филиалы (88 шт.); Уставный капитал 67760844 тыс. руб.",
+            "negative_text": "В реестре массовых адресов (13 юрлиц, в БД найдено - 17 юрлиц)",
+        },
         "address": "г. Москва, ул. Вавилова, д. 19",
         "period": "2024",
         "balance": {
@@ -106,6 +111,14 @@ MOCK_COMPANIES = {
         "termination_date": "2025-03-14",
         "charter_capital": "10000",
         "staff_count": "",
+        # Реальный ответ метода check (проверен live-запросом 30.08.2026)
+        "risk_flags": {
+            "positive_text": "",
+            "negative_text": (
+                "Ликвидировано по 129-ФЗ (14.03.2025); Исключена из реестра МСП; "
+                "Недостоверный адрес; Блокировка счета (от 27.01.2025, РНКБ БАНК (ПАО))"
+            ),
+        },
         "address": "",
         "period": "",
         "balance": {},
@@ -148,6 +161,7 @@ def get_mock_financial_data(inn: str):
             "termination_date": company.get("termination_date", ""),
             "charter_capital": company.get("charter_capital", ""),
             "staff_count": company.get("staff_count", ""),
+            "risk_flags": company.get("risk_flags", {"positive_text": "", "negative_text": ""}),
             "legal_address": company["address"],
             "updated_at": "2026-07-26T18:00:00",
             "years": (
