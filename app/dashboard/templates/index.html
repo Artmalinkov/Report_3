@@ -147,10 +147,16 @@
             <div class="card">
                 <div class="label">Расход платных API</div>
                 <div class="api-rows">
-                    <div class="row"><span class="name">ФНС</span><span class="value">{{ api_usage.fns }}</span></div>
+                    {% for method in ['egr', 'bo'] %}
+                    {% set m = api_usage.fns.get(method) %}
+                    <div class="row">
+                        <span class="name">ФНС · {{ method }}</span>
+                        <span class="value">{{ m.used ~ ' / ' ~ m.limit if m else 'Н/Д' }}</span>
+                    </div>
+                    {% endfor %}
                     <div class="row"><span class="name">IO_NET</span><span class="value">{{ api_usage.ionet }}</span></div>
                 </div>
-                <div class="note">Оценка по текущему кэшу (~24ч), не общий счётчик за всё время</div>
+                <div class="note">ФНС — точные цифры тарифа (метод stat, обновляется раз в час). IO_NET — грубая оценка по текущему кэшу (~24ч): для этого API аналога stat нет</div>
             </div>
             <div class="card wide">
                 <div class="label">Топ компаний</div>
