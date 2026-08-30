@@ -442,10 +442,20 @@ class ReportGenerator:
         re.IGNORECASE
     )
 
+    # Пробел между группами разрядов большого числа ("67 760 844 000") —
+    # разряд-группа всегда ровно 3 цифры, и после неё либо конец числа,
+    # либо еще один такой же разряд (а не произвольная цифра вроде "2024")
+    _NUMBER_GROUPS_RE = re.compile(r'(?<=\d) (?=\d{3}(?!\d))')
+
     @classmethod
     def _prevent_line_orphans(cls, text: str) -> str:
         """Заменяет обычный пробел после короткого предлога/союза на неразрывный (\\xa0)"""
         return cls._SHORT_WORDS_RE.sub(lambda m: m.group(1) + "\xa0", text)
+
+    @classmethod
+    def _prevent_number_wrap(cls, text: str) -> str:
+        """Заменяет пробелы между разрядами большого числа на неразрывные — число не переносится посреди себя"""
+        return cls._NUMBER_GROUPS_RE.sub("\xa0", text)
 
     @classmethod
     def _render_text(cls, text) -> str:
@@ -456,7 +466,8 @@ class ReportGenerator:
         систематически форматирует ответы жирным текстом, а Jinja2-шаблон
         вставляет строку как есть, без интерпретации markdown, — и
         расставляет неразрывные пробелы после коротких предлогов/союзов
-        (см. _prevent_line_orphans).
+        и между разрядами больших чисел (см. _prevent_line_orphans,
+        _prevent_number_wrap).
         """
         if not text:
             return text
@@ -466,6 +477,7 @@ class ReportGenerator:
                     .replace(">", "&gt;"))
         text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
         text = cls._prevent_line_orphans(text)
+        text = cls._prevent_number_wrap(text)
         return text
 
     @classmethod
