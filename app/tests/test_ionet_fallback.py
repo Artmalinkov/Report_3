@@ -22,7 +22,7 @@ async def test_fallback_not_used_when_primary_succeeds():
         result = await client._send_request_with_fallback("промпт")
 
     assert result == mock_response
-    mocked.assert_awaited_once_with("промпт")
+    mocked.assert_awaited_once_with("промпт", response_format=None)
 
 
 async def test_fallback_tries_next_model_on_credits_error():
@@ -30,7 +30,7 @@ async def test_fallback_tries_next_model_on_credits_error():
     client = IONETClient()
     mock_response = {"choices": [{"message": {"content": "от резервной"}}]}
 
-    async def side_effect(prompt, model=None):
+    async def side_effect(prompt, model=None, response_format=None):
         if model is None:
             raise IONetCreditsError("основная модель исчерпана")
         assert model == FALLBACK_MODELS[0]
